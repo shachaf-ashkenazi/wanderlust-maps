@@ -606,17 +606,23 @@ async function loadLocal() {
     loadingLocal = false;
   }
 }
+function unlockFragment() {
+  if (!location.hash) return;
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const key = fragment.get("key");
+  history.replaceState(null, "", location.pathname + location.search);
+  if (key) {
+    lock();
+    document.querySelector("#passphrase").value = key;
+    document.querySelector("#unlock").requestSubmit();
+  }
+}
 if (localMode) {
   document.querySelector("#unlock").hidden = true;
   document.title = "Wanderlust - Local map";
   loadLocal();
   setInterval(() => { if (!document.hidden) loadLocal(); }, 5000);
-} else if (location.hash) {
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  const key = fragment.get("key");
-  history.replaceState(null, "", location.pathname + location.search);
-  if (key) {
-    document.querySelector("#passphrase").value = key;
-    document.querySelector("#unlock").requestSubmit();
-  }
+} else {
+  window.addEventListener("hashchange", unlockFragment);
+  unlockFragment();
 }
