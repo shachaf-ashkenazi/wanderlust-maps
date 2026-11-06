@@ -111,7 +111,7 @@ function focusPlace(place) {
   selectPlace(place.id);
   setSidebar(false);
   markers.zoomToShowLayer(marker, () => {
-    map.setView([place.latitude, place.longitude], 16);
+    map.setView([place.latitude, place.longitude], 16, {animate: false});
     marker.openPopup();
   });
 }
