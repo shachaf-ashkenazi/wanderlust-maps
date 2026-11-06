@@ -59,8 +59,18 @@ class GooglePlaces {
   addLayer(layer) { this.layers.push(layer); this.cluster.addMarker(layer.native, true); }
   render() { this.cluster.render(); }
   zoomToShowLayer(layer, callback) { callback(); }
+  removeLayer(layer) {
+    if (this.view.popupPlaceId === layer.options.placeId) {
+      this.view.popup.close();
+      this.view.popupPlaceId = null;
+    }
+    this.cluster.removeMarker(layer.native, true);
+    google.maps.event.clearInstanceListeners(layer.native);
+    this.layers = this.layers.filter(current => current !== layer);
+  }
   clearLayers() {
     this.view.popup.close();
+    this.view.popupPlaceId = null;
     this.cluster.clearMarkers(true);
     for (const layer of this.layers) google.maps.event.clearInstanceListeners(layer.native);
     this.layers = [];
@@ -76,6 +86,12 @@ class GoogleMapView {
       zoomControl: true, fullscreenControl: true,
     });
     this.popup = new google.maps.InfoWindow({maxWidth: 330});
+    this.popupPlaceId = null;
+    this.popup.addListener("closeclick", () => { this.popupPlaceId = null; });
+    this.popup.addListener("domready", () => {
+      cancelAnimationFrame(this.popupFrame);
+      this.popupFrame = requestAnimationFrame(() => this.keepPopupVisible());
+    });
     this.places = new GooglePlaces(this);
   }
   getCenter() {
@@ -83,6 +99,15 @@ class GoogleMapView {
     return L.latLng(center.lat(), center.lng());
   }
   getZoom() { return this.native.getZoom(); }
+  on(event, callback) { this.native.addListener(event, callback); return this; }
+  keepPopupVisible() {
+    if (this.popupPlaceId === null) return;
+    const bounds = this.popupContent.getBoundingClientRect();
+    const header = document.querySelector("#map-header").getBoundingClientRect();
+    // Google's native title/close row sits above our popup content.
+    const offset = header.bottom + 64 - bounds.top;
+    if (bounds.left < header.right && bounds.right > header.left && offset > 0) this.native.panBy(0, -offset);
+  }
   setView(point, zoom) { this.native.moveCamera({center: googlePosition(point), zoom}); return this; }
   distance(first, second) { return L.latLng(first).distanceTo(L.latLng(second)); }
   fitBounds(bounds, options) {
@@ -101,12 +126,22 @@ class GoogleMapView {
     const native = new google.maps.Marker({position: {lat: place.latitude, lng: place.longitude},
       title: `${kinds[kindOf(place)].label}: ${place.name}`, icon: googlePlaceIcon(place)});
     const layer = {native, options: {placeId: place.id}, getLatLng: () => L.latLng(place.latitude, place.longitude),
+      setIcon: icon => native.setIcon(icon),
+      setPopupContent: next => {
+        content = next;
+        if (this.popupPlaceId === place.id) {
+          this.popupContent = content;
+          this.popup.setContent(content);
+        }
+      },
       openPopup: () => {
         this.popup.setContent(content);
         this.popup.setPosition(native.getPosition());
         this.popup.open({map: this.native});
+        this.popupPlaceId = place.id;
+        this.popupContent = content;
       }};
-    native.addListener("click", () => { selectPlace(place.id); layer.openPopup(); });
+    native.addListener("click", () => { selectPlace(place.id, true); layer.openPopup(); });
     return layer;
   }
   accuracy(point, meters) {

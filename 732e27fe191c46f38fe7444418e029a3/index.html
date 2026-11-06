@@ -14,7 +14,8 @@
 <link rel="stylesheet" href="../assets/MarkerCluster.Default.css">
 <link rel="stylesheet" href="../assets/styles.css">
 
-<header><h1 id="title">Wanderlust</h1><button id="lock" hidden>Lock map</button></header>
+<header id="map-header"><div><h1 id="title">Wanderlust</h1><small id="basemap-label"></small></div>
+<button id="toggle-sidebar" type="button" aria-controls="sidebar" aria-expanded="false" hidden>Places</button></header>
 <form id="unlock">
 <h2>Unlock this collection</h2>
 <p>This map's recommendations are encrypted. Unlocking happens in this browser. Anyone with the full share link can read this trip.</p>
@@ -23,8 +24,18 @@
 <button>Unlock map</button>
 </form>
 <p id="status" role="status"></p>
-<p id="provider-status" role="status"></p>
 <main id="content" hidden>
+<section id="map" aria-label="Recommendation map"></section>
+<aside id="sidebar" aria-label="Places and map tools" hidden>
+<div class="panel-header"><h2>Places</h2><button id="close-sidebar" type="button" aria-label="Close places and map tools">Close</button></div>
+<label for="search" class="search-label">Search this collection</label><input id="search" type="search" placeholder="Search places" autocomplete="off">
+<div id="legend" aria-label="Place symbols"></div>
+<div class="panel-sections">
+<details id="map-options"><summary>Tools &amp; sharing</summary>
+<div class="filters">
+<label>Type<select id="kind"><option value="">All types</option></select></label>
+<label>Order<select id="sort"><option value="saved">Saved order</option><option value="nearest" disabled>Nearest to me</option></select></label>
+</div>
 <nav id="map-tools" aria-label="Map controls">
 <button id="locate" type="button" aria-pressed="false">My location</button>
 <button id="fit" type="button">Fit places + me</button>
@@ -32,16 +43,13 @@
 <button id="share" type="button" hidden>Copy public share link</button>
 <a id="google-list-link" target="_blank" rel="noopener noreferrer" hidden>Open Google saved list</a>
 <button id="businesses" type="button" aria-pressed="true" title="Google's ordinary businesses, separate from your saved recommendations" hidden>Google businesses</button>
-<button id="toggle-sidebar" type="button" aria-controls="sidebar" aria-expanded="true">Hide places</button>
+<button id="lock" type="button" hidden>Lock map</button>
 <span id="location-status" role="status"></span>
 </nav>
-<section id="map" aria-label="Recommendation map"></section>
-<aside id="sidebar" aria-label="Places and route"><label for="search">Search this collection</label><input id="search" type="search" placeholder="Name, description or address">
-<div class="filters">
-<label>Type<select id="kind"><option value="">All types</option></select></label>
-<label>Order<select id="sort"><option value="saved">Saved order</option><option value="nearest" disabled>Nearest to me</option></select></label>
-</div>
-<div id="legend" aria-label="Place symbols"></div>
+<p id="provider-status" role="status"></p>
+<p class="export-note">To save a recommendation in the Google Maps app, open its Save link, tap Save, and choose this trip's list.
+Saved lists are separate from My Maps downloads. Downloads are unencrypted; import them as a My Maps layer and replace that layer to update it.</p>
+</details>
 <details id="planner" aria-label="Route planner">
 <summary>Your route <span id="route-count">(0)</span></summary>
 <p>Choose up to 4 mapped places, in your chosen order. The plan clears on lock/reload.</p>
@@ -50,8 +58,7 @@
 <a id="route-link" target="_blank" rel="noopener noreferrer" hidden>Open route in Google Maps</a>
 <p id="route-status" role="status"></p>
 </details>
-<p class="export-note">To save a recommendation in the Google Maps app, open its Save link, tap Save, and choose this trip's list.
-Saved lists are separate from My Maps downloads. Downloads are unencrypted; import them as a My Maps layer and replace that layer to update it.</p>
+</div>
 <p id="count"></p><div id="places"></div></aside>
 </main>
 <script nonce="" src="../assets/leaflet.js"></script>

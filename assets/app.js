@@ -87,7 +87,8 @@ function link(text, url, parent) {
   element.target = "_blank";
   element.rel = "noopener noreferrer";
 }
-function selectPlace(id) {
+function selectPlace(id, fromMarker = false) {
+  if (fromMarker) setSidebar(false);
   selectedPlaceId = id;
   for (const article of document.querySelectorAll("#places article")) {
     const selected = article.dataset.placeId === String(id);
@@ -108,13 +109,11 @@ function focusPlace(place) {
   const marker = markers.getLayers().find(layer => layer.options.placeId === place.id);
   if (!marker) return;
   selectPlace(place.id);
+  setSidebar(false);
   markers.zoomToShowLayer(marker, () => {
     map.setView([place.latitude, place.longitude], 16);
     marker.openPopup();
   });
-  if (matchMedia("(max-width: 700px)").matches) {
-    document.querySelector("#map").scrollIntoView({behavior: "smooth", block: "start"});
-  }
 }
 function card(place, parent, sidebar = false) {
   const article = node("article", "", parent);
@@ -217,7 +216,6 @@ function render(fitBounds = false) {
   }
   const root = document.querySelector("#places");
   root.replaceChildren();
-  markers.clearLayers();
   const groups = new Map();
   for (const place of filtered) {
     const key = subjectOf(place);
@@ -239,16 +237,7 @@ function render(fitBounds = false) {
     const list = node("div", "", group);
     for (const place of groups.get(key)) card(place, list, true);
   }
-  for (const place of filtered) {
-    if (coordinates(place)) {
-      const popup = document.createElement("div");
-      card(place, popup);
-      markers.addLayer(map.provider === "google" ? map.place(place, popup) :
-        L.marker([place.latitude, place.longitude], {
-          icon: placeIcon(place), title: `${kinds[kindOf(place)].label}: ${place.name}`, placeId: place.id,
-        }).bindPopup(popup, {minWidth: 250, maxWidth: 330}).on("click", () => selectPlace(place.id)));
-    }
-  }
+  updateMarkers(filtered);
   const mapped = filtered.filter(coordinates).length;
   if (map.provider === "google") markers.render();
   document.querySelector("#count").textContent = `${filtered.length} recommendations / ${mapped} mapped / ${filtered.length - mapped} unmapped`;
@@ -257,6 +246,46 @@ function render(fitBounds = false) {
   }
   renderRoute();
   if (fitBounds) fitPlaces();
+}
+function updateMarkers(filtered) {
+  const openLayer = map.provider === "google" ? null : markers.getLayers().find(layer => layer.isPopupOpen());
+  const mapped = new Map(filtered.filter(coordinates).map(place => [place.id, place]));
+  for (const layer of [...markers.getLayers()]) {
+    const place = mapped.get(layer.options.placeId), previous = layer.options.place;
+    if (!place || previous.name !== place.name || previous.latitude !== place.latitude || previous.longitude !== place.longitude) {
+      markers.removeLayer(layer);
+    }
+  }
+  const existing = new Map(markers.getLayers().map(layer => [layer.options.placeId, layer]));
+  for (const place of mapped.values()) {
+    const popup = document.createElement("div");
+    popup.className = "place-popup";
+    card(place, popup);
+    const iconKey = `${kindOf(place)}:${routeIds.indexOf(place.id)}`;
+    let layer = existing.get(place.id);
+    if (layer) {
+      if (!layer.options.popupContent.isEqualNode(popup)) {
+        layer.setPopupContent(popup);
+        layer.options.popupContent = popup;
+      }
+      if (layer.options.iconKey !== iconKey) {
+        layer.setIcon(map.provider === "google" ? googlePlaceIcon(place) : placeIcon(place));
+      }
+    } else {
+      layer = map.provider === "google" ? map.place(place, popup) :
+        L.marker([place.latitude, place.longitude], {
+          icon: placeIcon(place), title: `${kinds[kindOf(place)].label}: ${place.name}`, placeId: place.id,
+        }).bindPopup(popup, {minWidth: 250, maxWidth: 330,
+          autoPanPaddingTopLeft: [12, document.querySelector("#map-header").getBoundingClientRect().bottom + 12],
+          autoPanPaddingBottomRight: [12, 32]}).on("click", () => selectPlace(place.id, true));
+      layer.options.popupContent = popup;
+      markers.addLayer(layer);
+    }
+    layer.options.place = place;
+    layer.options.iconKey = iconKey;
+  }
+  // A new nearby pin can cluster an unchanged marker and close its popup.
+  if (openLayer && markers.hasLayer(openLayer) && !openLayer.isPopupOpen()) openLayer.getPopup().openOn(map);
 }
 function toggleStop(id) {
   const status = document.querySelector("#route-status");
@@ -398,6 +427,7 @@ function downloadMyMaps() {
 function providerMessage(text, google = false) {
   const message = document.querySelector("#provider-status");
   message.dataset.provider = google ? "google" : "osm";
+  document.querySelector("#basemap-label").textContent = google ? "Google Maps" : "OpenStreetMap";
   message.replaceChildren(document.createTextNode(text));
   if (google) link("Recommendation pins: OpenStreetMap / shared posts", "https://www.openstreetmap.org/copyright", message);
 }
@@ -409,7 +439,9 @@ function freeBasemap(reason) {
   locationMarker = accuracyCircle = null;
   if (map) map.remove();
   document.querySelector("#map").replaceChildren();
-  map = L.map("map", {maxZoom: 19}).setView(center, zoom);
+  map = L.map("map", {maxZoom: 19, zoomControl: false}).setView(center, zoom);
+  L.control.zoom({position: "bottomright"}).addTo(map);
+  backgroundTaps(map);
   markers = L.markerClusterGroup().addTo(map);
   setGoogleBusinesses(googleBusinessesVisible);
   basemap = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -424,6 +456,7 @@ function freeBasemap(reason) {
 function googleUsage(usage) {
   providerMessage(`Google Maps. Map openings: ${usage.daily_used}/${usage.daily_limit} today; ` +
     `${usage.monthly_used}/${usage.monthly_limit} this month. Panning and zooming reuse this map. App-only limits.`, true);
+  document.querySelector("#basemap-label").textContent = `Google Maps - ${usage.daily_used}/${usage.daily_limit} openings today`;
 }
 function setGoogleBusinesses(visible) {
   googleBusinessesVisible = visible;
@@ -451,6 +484,7 @@ async function startBasemap(availability) {
     const grant = await googleMapRequest(collectionId, token, {action: "load"});
     await loadGoogleSdk(grant.key, grant.region, failed);
     map = new GoogleMapView(document.querySelector("#map"));
+    backgroundTaps(map);
     markers = map.places;
     basemap = map;
     setGoogleBusinesses(googleBusinessesVisible);
@@ -475,8 +509,11 @@ async function show(payload, fitBounds = true) {
   document.querySelector("#unlock").hidden = true;
   document.querySelector("#lock").hidden = localMode;
   document.querySelector("#content").hidden = false;
+  document.body.classList.add("map-open");
+  document.querySelector("#toggle-sidebar").hidden = false;
   updateMapActions(payload);
   if (!map) {
+    setSidebar(false);
     await startBasemap(payload.basemap);
     render(fitBounds);
     return;
@@ -501,7 +538,10 @@ function lock() {
   selectedPlaceId = null;
   expandedPlaces.clear();
   collapsedSubjects.clear();
-  setSidebar(true);
+  setSidebar(false);
+  document.body.classList.remove("map-open");
+  document.querySelector("#toggle-sidebar").hidden = true;
+  document.querySelector("#basemap-label").textContent = "";
   document.querySelector("#places").replaceChildren();
   document.querySelector("#search").value = "";
   document.querySelector("#title").textContent = "Wanderlust";
@@ -513,14 +553,14 @@ function lock() {
   document.querySelector("#share").hidden = true;
   document.querySelector("#unlock").hidden = false;
   document.querySelector("#passphrase").value = "";
-  status.textContent = "";
+  mapStatus("");
   document.querySelector("#provider-status").replaceChildren();
 }
 document.querySelector("#unlock").onsubmit = async event => {
   event.preventDefault();
   const button = event.target.querySelector("button");
   button.disabled = true;
-  status.textContent = "Unlocking...";
+  mapStatus("Unlocking...");
   try {
     if (!crypto.subtle) throw new Error("Use HTTPS or localhost to unlock encrypted maps.");
     const response = await fetch("./data.enc.json", {cache: "no-store"});
@@ -539,10 +579,10 @@ document.querySelector("#unlock").onsubmit = async event => {
       additionalData: encoder.encode(`wanderlust-map:v1:${collectionId}`)}, key, decode(envelope.ciphertext));
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
     await show(payload);
-    status.textContent = `Updated ${new Date(payload.updated_at).toLocaleString()}. Only this collection is loaded.`;
+    mapStatus(`Updated ${new Date(payload.updated_at).toLocaleString()}. Only this collection is loaded.`);
   } catch (error) {
     lock();
-    status.textContent = error.name === "OperationError" ? "Wrong passphrase, damaged data, or a different collection." : error.message;
+    mapStatus(error.name === "OperationError" ? "Wrong passphrase, damaged data, or a different collection." : error.message, true);
   } finally {
     button.disabled = false;
   }
@@ -564,19 +604,50 @@ document.querySelector("#share").onclick = async () => {
     const sharing = await response.json();
     if (!response.ok) throw new Error(sharing.error || "Share link is unavailable.");
     await navigator.clipboard.writeText(sharing.share_url);
-    status.textContent = "Private share link copied. Anyone with the full link can read this trip.";
-  } catch (error) { status.textContent = error.message; }
+    mapStatus("Private share link copied. Anyone with the full link can read this trip.", true);
+  } catch (error) { mapStatus(error.message, true); }
 };
 document.querySelector("#businesses").onclick = () => setGoogleBusinesses(!googleBusinessesVisible);
 function setSidebar(open) {
   document.querySelector("#sidebar").hidden = !open;
-  document.querySelector("#content").classList.toggle("sidebar-collapsed", !open);
+  document.body.classList.toggle("menu-open", open);
   const button = document.querySelector("#toggle-sidebar");
-  button.textContent = open ? "Hide places" : "Show places";
+  button.textContent = open ? "Close" : "Places";
   button.setAttribute("aria-expanded", String(open));
-  requestAnimationFrame(() => { if (map) map.invalidateSize({pan: false}); });
 }
 document.querySelector("#toggle-sidebar").onclick = () => setSidebar(document.querySelector("#sidebar").hidden);
+document.querySelector("#close-sidebar").onclick = () => {
+  setSidebar(false);
+  document.querySelector("#toggle-sidebar").focus();
+};
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !document.querySelector("#sidebar").hidden) {
+    setSidebar(false);
+    document.querySelector("#toggle-sidebar").focus();
+  }
+});
+function mapStatus(message, notice = false) {
+  status.textContent = message;
+  status.dataset.notice = String(notice);
+}
+function backgroundTaps(view) {
+  let timer, dragging = false, ignoreUntil = 0;
+  const cancel = () => clearTimeout(timer);
+  view.on("dragstart", () => { dragging = true; cancel(); });
+  view.on("dragend", () => { dragging = false; ignoreUntil = performance.now() + 150; });
+  view.on("dblclick", cancel);
+  view.on("click", event => {
+    const original = event.originalEvent || event.domEvent, target = original?.target;
+    cancel();
+    if (dragging || performance.now() < ignoreUntil || event.placeId || original?.detail > 1 ||
+        target?.closest(".leaflet-popup, .leaflet-marker-icon, .leaflet-control, button, a, input, select")) return;
+    timer = setTimeout(() => {
+      if (map === view && !dragging && !document.querySelector("#content").hidden) {
+        setSidebar(document.querySelector("#sidebar").hidden);
+      }
+    }, 220);
+  });
+}
 function updateMapActions(payload) {
   document.querySelector("#share").hidden = !localMode || !payload.sharing?.url;
   const list = document.querySelector("#google-list-link");
@@ -598,10 +669,10 @@ async function loadLocal() {
       if (payload.basemap.enabled) googleUsage(payload.basemap.usage);
       else freeBasemap(`Google stopped: ${payload.basemap.reason}`);
     }
-    status.textContent = payload.sharing?.error ? "Public updates are paused: " + payload.sharing.error :
-      "Live local map. New recommendations appear automatically; no export or approval is needed.";
+    mapStatus(payload.sharing?.error ? "Public updates are paused: " + payload.sharing.error :
+      "Live local map. New recommendations appear automatically; no export or approval is needed.", Boolean(payload.sharing?.error));
   } catch (error) {
-    status.textContent = error.message;
+    mapStatus(error.message, true);
   } finally {
     loadingLocal = false;
   }
