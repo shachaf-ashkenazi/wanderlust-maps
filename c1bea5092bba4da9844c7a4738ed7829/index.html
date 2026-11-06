@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="collection-id" content="c1bea5092bba4da9844c7a4738ed7829">
+<meta name="map-mode" content="encrypted">
+<meta name="map-token" content="">
+<title>Wanderlust - Locked map</title>
+<link rel="stylesheet" href="../assets/leaflet.css">
+<link rel="stylesheet" href="../assets/MarkerCluster.css">
+<link rel="stylesheet" href="../assets/MarkerCluster.Default.css">
+<link rel="stylesheet" href="../assets/styles.css">
+
+<header><h1 id="title">Wanderlust</h1><button id="lock" hidden>Lock map</button></header>
+<form id="unlock">
+<h2>Unlock this collection</h2>
+<p>This map's recommendations are encrypted. Unlocking happens in this browser. Anyone with the full share link can read this trip.</p>
+<label for="passphrase">Passphrase</label>
+<input id="passphrase" type="password" autocomplete="off" required minlength="16">
+<button>Unlock map</button>
+</form>
+<p id="status" role="status"></p>
+<p id="provider-status" role="status"></p>
+<main id="content" hidden>
+<nav id="map-tools" aria-label="Map controls">
+<button id="locate" type="button" aria-pressed="false">My location</button>
+<button id="fit" type="button">Fit places + me</button>
+<button id="download" type="button">Download for Google My Maps</button>
+<button id="share" type="button" hidden>Copy public share link</button>
+<a id="google-list-link" target="_blank" rel="noopener noreferrer" hidden>Open Google saved list</a>
+<button id="businesses" type="button" aria-pressed="true" title="Google's ordinary businesses, separate from your saved recommendations" hidden>Google businesses</button>
+<button id="toggle-sidebar" type="button" aria-controls="sidebar" aria-expanded="true">Hide places</button>
+<span id="location-status" role="status"></span>
+</nav>
+<section id="map" aria-label="Recommendation map"></section>
+<aside id="sidebar" aria-label="Places and route"><label for="search">Search this collection</label><input id="search" type="search" placeholder="Name, description or address">
+<div class="filters">
+<label>Type<select id="kind"><option value="">All types</option></select></label>
+<label>Order<select id="sort"><option value="saved">Saved order</option><option value="nearest" disabled>Nearest to me</option></select></label>
+</div>
+<div id="legend" aria-label="Place symbols"></div>
+<details id="planner" aria-label="Route planner">
+<summary>Your route <span id="route-count">(0)</span></summary>
+<p>Choose up to 4 mapped places, in your chosen order. The plan clears on lock/reload.</p>
+<ol id="route-stops"></ol>
+<label>Travel mode<select id="travel-mode"><option value="walking">Walking</option><option value="driving">Driving</option><option value="bicycling">Cycling</option></select></label>
+<a id="route-link" target="_blank" rel="noopener noreferrer" hidden>Open route in Google Maps</a>
+<p id="route-status" role="status"></p>
+</details>
+<p class="export-note">To save a recommendation in the Google Maps app, open its Save link, tap Save, and choose this trip's list.
+Saved lists are separate from My Maps downloads. Downloads are unencrypted; import them as a My Maps layer and replace that layer to update it.</p>
+<p id="count"></p><div id="places"></div></aside>
+</main>
+<script nonce="" src="../assets/leaflet.js"></script>
+<script nonce="" src="../assets/leaflet.markercluster.js"></script>
+<script nonce="" src="../assets/google-markerclusterer.js"></script>
+<script nonce="" src="../assets/google.js"></script>
+<script nonce="" src="../assets/app.js"></script>
+</html>
