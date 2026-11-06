@@ -57,6 +57,7 @@ const decode = value => Uint8Array.from(atob(value), character => character.char
 const coordinates = place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) &&
   Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180;
 function navigationUrl(place) {
+  if (place.maps_url) return place.maps_url;
   const destination = coordinates(place) ? `${place.latitude},${place.longitude}` :
     [place.name, place.address, place.locality].filter(Boolean).join(" ");
   const params = new URLSearchParams({api: "1", destination, dir_action: "navigate"});
@@ -143,6 +144,8 @@ function card(place, parent, sidebar = false) {
   node("h3", place.name, heading).dir = "auto";
   const kind = kinds[kindOf(place)];
   node("span", `${kind.symbol} ${kind.label}`, heading).className = "place-type";
+  node("span", locationReviewLabel(place), heading).className =
+    "review-badge" + (place.google_maps_confirmed ? " is-confirmed" : "");
   if (place.description) {
     const description = node("p", place.description, content);
     description.className = "description";
@@ -156,7 +159,9 @@ function card(place, parent, sidebar = false) {
       content).className = "distance";
   }
   if (!coordinates(place)) {
-    node("p", "Not mapped yet: automatic lookup could not resolve a confident pin. The recommendation is saved.", content).className = "missing";
+    node("p", place.google_maps_confirmed ?
+      "Google Maps link checked by you. Its URL has no precise map pin; the recommendation is still saved." :
+      "Not mapped yet: automatic lookup could not resolve a confident pin. The recommendation is saved.", content).className = "missing";
   }
   const actions = node("div", "", content);
   actions.className = "place-actions";
@@ -171,8 +176,24 @@ function card(place, parent, sidebar = false) {
   }
   if (place.source_url) link("Original recommendation", place.source_url, actions);
   const search = new URLSearchParams({api: "1", query: [place.name, place.address, place.locality].filter(Boolean).join(" ")});
-  link("Save in Google Maps", "https://www.google.com/maps/search/?" + search, actions);
+  link("Save in Google Maps", place.google_maps_confirmed ? navigationUrl(place) :
+    "https://www.google.com/maps/search/?" + search, actions);
+  if (localMode) content.append(locationReviewControls({...place, maps_url: navigationUrl(place)},
+    change => reviewPlace(place, change)));
   return article;
+}
+async function reviewPlace(place, change) {
+  const [id, index] = place.id.split(":").map(Number);
+  const token = document.querySelector('meta[name="map-token"]').content;
+  const response = await fetch("/api/location-review", {method: "POST",
+    headers: {"Content-Type": "application/json", "X-Inbox-Token": token},
+    body: JSON.stringify({collection: collectionId, id, index, ...change})});
+  const saved = await response.json();
+  if (!response.ok) throw new Error(saved.error || "Location review could not be saved.");
+  await loadLocal();
+  mapStatus(saved.mapped ? "Location checked and saved." :
+    "Google Maps link checked and saved. Paste a place link with a precise location to add its missing pin.", true);
+  return saved;
 }
 function placeIcon(place) {
   const kind = kinds[kindOf(place)], symbol = document.createElement("span");
@@ -207,7 +228,11 @@ function updateKinds() {
 function render(fitBounds = false) {
   const query = document.querySelector("#search").value.trim().toLocaleLowerCase();
   const type = document.querySelector("#kind").value;
+  const review = document.querySelector("#review-filter").value;
   const filtered = places.filter(place => (!type || kindOf(place) === type) &&
+    (review !== "unreviewed" || !place.google_maps_confirmed) &&
+    (review !== "confirmed" || place.google_maps_confirmed) &&
+    (review !== "unmapped" || !coordinates(place)) &&
     `${place.name} ${place.address || ""} ${place.description || ""} ${kinds[kindOf(place)].label}`.toLocaleLowerCase().includes(query));
   const nearest = userPosition && document.querySelector("#sort").value === "nearest";
   if (nearest) {
@@ -240,7 +265,9 @@ function render(fitBounds = false) {
   updateMarkers(filtered);
   const mapped = filtered.filter(coordinates).length;
   if (map.provider === "google") markers.render();
-  document.querySelector("#count").textContent = `${filtered.length} recommendations / ${mapped} mapped / ${filtered.length - mapped} unmapped`;
+  const checked = filtered.filter(place => place.google_maps_confirmed).length;
+  document.querySelector("#count").textContent =
+    `${filtered.length} recommendations / ${mapped} mapped / ${filtered.length - mapped} unmapped / ${checked} checked by you`;
   for (const button of document.querySelectorAll("#legend button")) {
     button.setAttribute("aria-pressed", String(button.dataset.kind === type));
   }
@@ -511,6 +538,9 @@ async function show(payload, fitBounds = true) {
   document.querySelector("#content").hidden = false;
   document.body.classList.add("map-open");
   document.querySelector("#toggle-sidebar").hidden = false;
+  document.querySelector("#review-note").textContent = localMode ?
+    "Checking a destination updates this map, not Google saved-list membership." :
+    "Read-only snapshot. Check or correct destinations in the local app; published updates include saved reviews.";
   updateMapActions(payload);
   if (!map) {
     setSidebar(false);
@@ -538,12 +568,14 @@ function lock() {
   selectedPlaceId = null;
   expandedPlaces.clear();
   collapsedSubjects.clear();
+  locationReviewDrafts.clear();
   setSidebar(false);
   document.body.classList.remove("map-open");
   document.querySelector("#toggle-sidebar").hidden = true;
   document.querySelector("#basemap-label").textContent = "";
   document.querySelector("#places").replaceChildren();
   document.querySelector("#search").value = "";
+  document.querySelector("#review-filter").value = "";
   document.querySelector("#title").textContent = "Wanderlust";
   document.title = "Wanderlust - Locked map";
   document.querySelector("#content").hidden = true;
@@ -590,6 +622,7 @@ document.querySelector("#unlock").onsubmit = async event => {
 document.querySelector("#lock").onclick = lock;
 document.querySelector("#search").oninput = () => render();
 document.querySelector("#kind").onchange = () => render();
+document.querySelector("#review-filter").onchange = () => render();
 document.querySelector("#sort").onchange = () => render(false);
 document.querySelector("#travel-mode").onchange = renderRoute;
 document.querySelector("#locate").onclick = locate;
