@@ -132,7 +132,8 @@ function card(place, parent, sidebar = false) {
       if (!details.open && coordinates(place)) {
         event.preventDefault();
         focusPlace(place);
-      }
+      } else if (details.open) expandedPlaces.delete(place.id);
+      else expandedPlaces.add(place.id);
     };
     details.ontoggle = () => {
       if (details.isConnected) {
