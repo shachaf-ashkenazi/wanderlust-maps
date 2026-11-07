@@ -1,0 +1,84 @@
+"use strict";
+const locationReviewDrafts = new Map();
+
+function locationReviewLabel(place) {
+  return place.google_maps_confirmed ? "Checked by you" : "Needs checking";
+}
+
+function locationReviewControls(place, submit) {
+  const add = (tag, text, parent) => {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    parent.append(element);
+    return element;
+  };
+  const state = locationReviewDrafts.get(place.id) || {url: "", open: false, busy: false};
+  const details = document.createElement("details");
+  details.className = "location-review";
+  details.open = state.open;
+  details.ontoggle = event => {
+    if (event.target === details && details.isConnected) {
+      state.open = details.open;
+      locationReviewDrafts.set(place.id, state);
+    }
+  };
+  const summary = add("summary", "Check / correct Google Maps location", details);
+  summary.onclick = () => {
+    state.open = !details.open;
+    locationReviewDrafts.set(place.id, state);
+  };
+  const destination = add("a", "Check destination in Google Maps", details);
+  destination.href = place.maps_url;
+  destination.target = "_blank";
+  destination.rel = "noopener noreferrer";
+  add("p", "Open the destination and check the place. If it is wrong, paste the correct place's Google Maps share link below.", details);
+  const confirm = add("button", "This is the right place", details);
+  confirm.type = "button";
+  const form = add("form", "", details);
+  form.className = "location-review-form";
+  const label = add("label", "Correct Google Maps URL", form);
+  const input = add("input", "", label);
+  input.type = "url";
+  input.className = "review-url";
+  input.placeholder = "https://maps.app.goo.gl/...";
+  input.autocomplete = "off";
+  input.maxLength = 8192;
+  input.required = true;
+  input.value = state.url;
+  input.oninput = () => {
+    state.url = input.value;
+    state.open = details.open;
+    locationReviewDrafts.set(place.id, state);
+  };
+  const save = add("button", "Use this Google Maps link", form);
+  save.type = "submit";
+  add("small", "We use the place location, never the map camera. A link without a precise location is retained without inventing a pin.", details);
+  const feedback = add("p", "", details);
+  feedback.className = "review-feedback";
+  feedback.setAttribute("role", "status");
+  async function review(correction) {
+    if (state.busy) return;
+    state.busy = true;
+    confirm.disabled = save.disabled = input.disabled = true;
+    feedback.textContent = "Saving your review...";
+    feedback.setAttribute("role", "status");
+    try {
+      const saved = await submit({expected_url: place.maps_url, ...correction});
+      locationReviewDrafts.delete(place.id);
+      feedback.textContent = saved.mapped ? "Location checked and saved." :
+        "Google Maps link checked and saved. No precise map pin is available from this link.";
+    } catch (error) {
+      feedback.setAttribute("role", "alert");
+      feedback.textContent = error.message;
+    } finally {
+      state.busy = false;
+      confirm.disabled = save.disabled = input.disabled = false;
+    }
+  }
+  confirm.onclick = () => review({});
+  form.onsubmit = event => {
+    event.preventDefault();
+    review({url: input.value.trim()});
+  };
+  return details;
+}

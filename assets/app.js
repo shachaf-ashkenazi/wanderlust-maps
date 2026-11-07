@@ -226,7 +226,17 @@ function updateKinds() {
   }
   if (available.includes(selected)) select.value = selected;
 }
+function restoreReviewFocus(previous) {
+  if (!previous.matches(".review-url") || previous.isConnected) return;
+  const id = previous.closest("article").dataset.placeId;
+  const scope = previous.closest(".place-popup") ? ".place-popup" : "#places";
+  const input = document.querySelector(`${scope} [data-place-id="${CSS.escape(id)}"] .review-url`);
+  if (!input) return;
+  input.focus({preventScroll: true});
+  input.setSelectionRange(previous.selectionStart, previous.selectionEnd, previous.selectionDirection);
+}
 function render(fitBounds = false) {
+  const focused = document.activeElement;
   const query = document.querySelector("#search").value.trim().toLocaleLowerCase();
   const type = document.querySelector("#kind").value;
   const review = document.querySelector("#review-filter").value;
@@ -264,6 +274,7 @@ function render(fitBounds = false) {
     for (const place of groups.get(key)) card(place, list, true);
   }
   updateMarkers(filtered);
+  restoreReviewFocus(focused);
   const mapped = filtered.filter(coordinates).length;
   if (map.provider === "google") markers.render();
   const checked = filtered.filter(place => place.google_maps_confirmed).length;
