@@ -5,6 +5,10 @@ function locationReviewLabel(place) {
   return place.google_maps_confirmed ? "Checked by you" : "Needs checking";
 }
 
+function locationReviewPath(change) {
+  return change.drop ? "/api/location-drop" : "/api/location-review";
+}
+
 function locationReviewControls(place, submit) {
   const add = (tag, text, parent) => {
     const element = document.createElement(tag);
@@ -53,29 +57,34 @@ function locationReviewControls(place, submit) {
   const save = add("button", "Use this Google Maps link", form);
   save.type = "submit";
   add("small", "We use the place location, never the map camera. A link without a precise location is retained without inventing a pin.", details);
+  add("p", "Already added or cannot find it? Drop just this recommendation. Its source post and your Google saved list stay unchanged.", details);
+  const drop = add("button", "Cancel / drop recommendation", details);
+  drop.type = "button";
+  drop.className = "review-drop";
   const feedback = add("p", "", details);
   feedback.className = "review-feedback";
   feedback.setAttribute("role", "status");
   async function review(correction) {
     if (state.busy) return;
     state.busy = true;
-    confirm.disabled = save.disabled = input.disabled = true;
+    confirm.disabled = save.disabled = drop.disabled = input.disabled = true;
     feedback.textContent = "Saving your review...";
     feedback.setAttribute("role", "status");
     try {
       const saved = await submit({expected_url: place.maps_url, ...correction});
       locationReviewDrafts.delete(place.id);
-      feedback.textContent = saved.mapped ? "Location checked and saved." :
+      feedback.textContent = saved.dropped ? "Recommendation dropped." : saved.mapped ? "Location checked and saved." :
         "Google Maps link checked and saved. No precise map pin is available from this link.";
     } catch (error) {
       feedback.setAttribute("role", "alert");
       feedback.textContent = error.message;
     } finally {
       state.busy = false;
-      confirm.disabled = save.disabled = input.disabled = false;
+      confirm.disabled = save.disabled = drop.disabled = input.disabled = false;
     }
   }
   confirm.onclick = () => review({});
+  drop.onclick = () => review({drop: true});
   form.onsubmit = event => {
     event.preventDefault();
     review({url: input.value.trim()});

@@ -186,13 +186,14 @@ function card(place, parent, sidebar = false) {
 async function reviewPlace(place, change) {
   const [id, index] = place.id.split(":").map(Number);
   const token = document.querySelector('meta[name="map-token"]').content;
-  const response = await fetch("/api/location-review", {method: "POST",
+  const response = await fetch(locationReviewPath(change), {method: "POST",
     headers: {"Content-Type": "application/json", "X-Inbox-Token": token},
     body: JSON.stringify({collection: collectionId, id, index, ...change})});
   const saved = await response.json();
   if (!response.ok) throw new Error(saved.error || "Location review could not be saved.");
   await loadLocal();
-  mapStatus(saved.mapped ? "Location checked and saved." :
+  mapStatus(saved.dropped ? "Recommendation dropped. Public updates follow the publishing cycle." :
+    saved.mapped ? "Location checked and saved." :
     "Google Maps link checked and saved. Paste a place link with a precise location to add its missing pin.", true);
   return saved;
 }
@@ -240,11 +241,12 @@ function render(fitBounds = false) {
   const query = document.querySelector("#search").value.trim().toLocaleLowerCase();
   const type = document.querySelector("#kind").value;
   const review = document.querySelector("#review-filter").value;
-  const filtered = places.filter(place => (!type || kindOf(place) === type) &&
+  const visible = places.filter(place => (!type || kindOf(place) === type) &&
+    `${place.name} ${place.address || ""} ${place.description || ""} ${kinds[kindOf(place)].label}`.toLocaleLowerCase().includes(query));
+  const filtered = visible.filter(place =>
     (review !== "unreviewed" || !place.google_maps_confirmed) &&
     (review !== "confirmed" || place.google_maps_confirmed) &&
-    (review !== "unmapped" || !coordinates(place)) &&
-    `${place.name} ${place.address || ""} ${place.description || ""} ${kinds[kindOf(place)].label}`.toLocaleLowerCase().includes(query));
+    (review !== "unmapped" || (!coordinates(place) && !place.google_maps_confirmed)));
   const nearest = userPosition && document.querySelector("#sort").value === "nearest";
   if (nearest) {
     const distance = place => coordinates(place) ? map.distance(userPosition, [place.latitude, place.longitude]) : Infinity;
@@ -273,13 +275,13 @@ function render(fitBounds = false) {
     const list = node("div", "", group);
     for (const place of groups.get(key)) card(place, list, true);
   }
-  updateMarkers(filtered);
+  updateMarkers(visible);
   restoreReviewFocus(focused);
-  const mapped = filtered.filter(coordinates).length;
+  const mapped = visible.filter(coordinates).length;
   if (map.provider === "google") markers.render();
-  const checked = filtered.filter(place => place.google_maps_confirmed).length;
+  const checked = visible.filter(place => place.google_maps_confirmed).length;
   document.querySelector("#count").textContent =
-    `${filtered.length} recommendations / ${mapped} mapped / ${filtered.length - mapped} unmapped / ${checked} checked by you`;
+    `${filtered.length} in list / ${visible.length} saved / ${mapped} mapped / ${visible.length - mapped} unmapped / ${checked} checked by you`;
   for (const button of document.querySelectorAll("#legend button")) {
     button.setAttribute("aria-pressed", String(button.dataset.kind === type));
   }
@@ -551,10 +553,11 @@ async function show(payload, fitBounds = true) {
   document.body.classList.add("map-open");
   document.querySelector("#toggle-sidebar").hidden = false;
   document.querySelector("#review-note").textContent = localMode ?
-    "Checking a destination updates this map, not Google saved-list membership." :
+    "Checked places leave the review queue; saved pins stay on the map. Public updates follow publishing. Google saved lists are unchanged." :
     "Read-only snapshot. Check or correct destinations in the local app; published updates include saved reviews.";
   updateMapActions(payload);
   if (!map) {
+    document.querySelector("#review-filter").value = localMode ? "unreviewed" : "";
     setSidebar(false);
     await startBasemap(payload.basemap);
     render(fitBounds);
