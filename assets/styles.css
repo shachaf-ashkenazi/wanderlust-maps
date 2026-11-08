@@ -35,6 +35,7 @@ aside { position: absolute; z-index: 1000; top: calc(84px + env(safe-area-inset-
 .place-popup > article { padding: 0; border: 0; }
 article { border-bottom: 1px solid #d8dee8; padding: 12px 0; } h3 { margin: 0 0 8px; } p { overflow-wrap: anywhere; }
 a { display: inline-block; color: #174f9d; margin: 8px 12px 8px 0; } .missing { color: #805100; }
+.leaflet-control-attribution a { display: inline; margin: 0; }
 .description { line-height: 1.5; margin: 8px 0; white-space: pre-line; }
 .place-type, .distance, .export-note { font-size: .85rem; color: #536078; }
 .filters { display: flex; gap: 8px; } .filters label { flex: 1; min-width: 0; }

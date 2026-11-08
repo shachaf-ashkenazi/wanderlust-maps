@@ -111,10 +111,8 @@ function focusPlace(place) {
   if (!marker) return;
   selectPlace(place.id);
   setSidebar(false);
-  markers.zoomToShowLayer(marker, () => {
-    map.setView([place.latitude, place.longitude], 16, {animate: false});
-    marker.openPopup();
-  });
+  map.setView([place.latitude, place.longitude], 16, {animate: false});
+  marker.openPopup();
 }
 function card(place, parent, sidebar = false) {
   const article = node("article", "", parent);
@@ -278,7 +276,6 @@ function render(fitBounds = false) {
   updateMarkers(visible);
   restoreReviewFocus(focused);
   const mapped = visible.filter(coordinates).length;
-  if (map.provider === "google") markers.render();
   const checked = visible.filter(place => place.google_maps_confirmed).length;
   document.querySelector("#count").textContent =
     `${filtered.length} in list / ${visible.length} saved / ${mapped} mapped / ${visible.length - mapped} unmapped / ${checked} checked by you`;
@@ -316,17 +313,33 @@ function updateMarkers(filtered) {
       layer = map.provider === "google" ? map.place(place, popup) :
         L.marker([place.latitude, place.longitude], {
           icon: placeIcon(place), title: `${kinds[kindOf(place)].label}: ${place.name}`, placeId: place.id,
-        }).bindPopup(popup, {minWidth: 250, maxWidth: 330,
-          autoPanPaddingTopLeft: [12, document.querySelector("#map-header").getBoundingClientRect().bottom + 12],
-          autoPanPaddingBottomRight: [12, 32]}).on("click", () => selectPlace(place.id, true));
+        }).bindPopup(popup, popupOptions()).on("click", () => selectPlace(place.id, true));
       layer.options.popupContent = popup;
       markers.addLayer(layer);
     }
     layer.options.place = place;
     layer.options.iconKey = iconKey;
   }
-  // A new nearby pin can cluster an unchanged marker and close its popup.
   if (openLayer && markers.hasLayer(openLayer) && !openLayer.isPopupOpen()) openLayer.getPopup().openOn(map);
+}
+function popupOptions() {
+  return {minWidth: 250, maxWidth: 330,
+    autoPanPaddingTopLeft: [12, document.querySelector("#map-header").getBoundingClientRect().bottom + 12],
+    autoPanPaddingBottomRight: [12, 32]};
+}
+function showOrdinaryPlace(place) {
+  setSidebar(false);
+  const popup = document.createElement("div");
+  popup.className = "place-popup ordinary-place-popup";
+  node("h3", place.name, popup).dir = "auto";
+  node("p", place.kind, popup).className = "place-type";
+  node("p", "An OpenStreetMap place, not a saved trip recommendation.", popup);
+  const actions = node("div", "", popup);
+  actions.className = "place-actions";
+  link("Directions", navigationUrl(place), actions);
+  const search = new URLSearchParams({api: "1", query: `${place.name} ${place.latitude},${place.longitude}`});
+  link("Search in Google Maps", `https://www.google.com/maps/search/?${search}`, actions);
+  L.popup(popupOptions()).setLatLng([place.latitude, place.longitude]).setContent(popup).openOn(map);
 }
 function toggleStop(id) {
   const status = document.querySelector("#route-status");
@@ -480,15 +493,27 @@ function freeBasemap(reason) {
   locationMarker = accuracyCircle = null;
   if (map) map.remove();
   document.querySelector("#map").replaceChildren();
-  map = L.map("map", {maxZoom: 19, zoomControl: false}).setView(center, zoom);
+  map = L.map("map", {minZoom: 1, maxZoom: 19, zoomControl: false}).setView(center, Math.max(1, zoom));
   L.control.zoom({position: "bottomright"}).addTo(map);
   backgroundTaps(map);
-  markers = L.markerClusterGroup().addTo(map);
-  setGoogleBusinesses(googleBusinessesVisible);
-  basemap = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  }).addTo(map);
-  providerMessage(`Free OpenStreetMap basemap. ${reason}`);
+  markers = L.featureGroup().addTo(map);
+  const current = map;
+  const raster = message => {
+    if (map !== current) return;
+    if (basemap?.getMaplibreMap) basemap.remove();
+    map.getContainer().style.cursor = "";
+    basemap = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+    setGoogleBusinesses(googleBusinessesVisible);
+    providerMessage(`Standard OpenStreetMap tiles; background labels are not clickable. ${message}. ${reason}`);
+  };
+  try {
+    basemap = window.openStreetMapLayer(map, error => raster(`Interactive places failed: ${error}`));
+    providerMessage(`Free OpenStreetMap places from OpenFreeMap. Tap a place label for details or directions. ${reason}`);
+    document.querySelector("#basemap-label").textContent = "OpenStreetMap / OpenFreeMap";
+    setGoogleBusinesses(googleBusinessesVisible);
+  } catch (error) { raster(`Interactive places are unavailable: ${error.message}`); }
   if (previous) {
     render(false);
     if (userPosition) drawLocation(accuracy);
@@ -502,9 +527,10 @@ function googleUsage(usage) {
 function setGoogleBusinesses(visible) {
   googleBusinessesVisible = visible;
   const button = document.querySelector("#businesses");
-  button.hidden = map?.provider !== "google";
+  button.hidden = map?.provider !== "google" && !basemap?.setBusinesses;
+  button.textContent = map?.provider === "google" ? "Google businesses" : "Map places";
   button.setAttribute("aria-pressed", String(visible));
-  if (!button.hidden) map.setBusinesses(visible);
+  if (!button.hidden) (map.provider === "google" ? map : basemap).setBusinesses(visible);
 }
 async function startBasemap(availability) {
   if (!localMode) {
@@ -681,9 +707,22 @@ function mapStatus(message, notice = false) {
 function backgroundTaps(view) {
   let timer, dragging = false, ignoreUntil = 0;
   const cancel = () => clearTimeout(timer);
-  view.on("dragstart", () => { dragging = true; cancel(); });
+  if (view.provider !== "google") view.on("popupopen", ({popup}) => {
+    // Leaflet's touch double-tap shim must not count popup actions as map taps.
+    L.DomEvent.on(popup.getElement(), "click", L.DomEvent.stopPropagation);
+  });
+  view.on("dragstart", () => {
+    dragging = true;
+    if (view.provider !== "google") view.getContainer().style.cursor = "";
+    cancel();
+  });
   view.on("dragend", () => { dragging = false; ignoreUntil = performance.now() + 150; });
   view.on("dblclick", cancel);
+  view.on("mousemove", event => {
+    if (view.provider !== "google" && basemap?.placeAt && !dragging) {
+      view.getContainer().style.cursor = basemap.placeAt(event) ? "pointer" : "";
+    }
+  });
   view.on("click", event => {
     const original = event.originalEvent || event.domEvent, target = original?.target;
     cancel();
@@ -691,6 +730,8 @@ function backgroundTaps(view) {
         target?.closest(".leaflet-popup, .leaflet-marker-icon, .leaflet-control, button, a, input, select")) return;
     timer = setTimeout(() => {
       if (map === view && !dragging && !document.querySelector("#content").hidden) {
+        const place = basemap?.placeAt?.(event);
+        if (place) { showOrdinaryPlace(place); return; }
         setSidebar(document.querySelector("#sidebar").hidden);
       }
     }, 220);
@@ -736,6 +777,8 @@ function unlockFragment() {
     document.querySelector("#unlock").requestSubmit();
   }
 }
+document.querySelector("#unlock button").disabled = false;
+document.querySelector("#unlock button").textContent = "Unlock map";
 if (localMode) {
   document.querySelector("#unlock").hidden = true;
   document.title = "Wanderlust - Local map";

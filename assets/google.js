@@ -53,26 +53,25 @@ class GooglePlaces {
   constructor(view) {
     this.view = view;
     this.layers = [];
-    this.cluster = new markerClusterer.MarkerClusterer({map: view.native, markers: []});
   }
   getLayers() { return this.layers; }
-  addLayer(layer) { this.layers.push(layer); this.cluster.addMarker(layer.native, true); }
-  render() { this.cluster.render(); }
-  zoomToShowLayer(layer, callback) { callback(); }
+  addLayer(layer) { this.layers.push(layer); layer.native.setMap(this.view.native); }
   removeLayer(layer) {
     if (this.view.popupPlaceId === layer.options.placeId) {
       this.view.popup.close();
       this.view.popupPlaceId = null;
     }
-    this.cluster.removeMarker(layer.native, true);
+    layer.native.setMap(null);
     google.maps.event.clearInstanceListeners(layer.native);
     this.layers = this.layers.filter(current => current !== layer);
   }
   clearLayers() {
     this.view.popup.close();
     this.view.popupPlaceId = null;
-    this.cluster.clearMarkers(true);
-    for (const layer of this.layers) google.maps.event.clearInstanceListeners(layer.native);
+    for (const layer of this.layers) {
+      layer.native.setMap(null);
+      google.maps.event.clearInstanceListeners(layer.native);
+    }
     this.layers = [];
   }
 }
@@ -158,7 +157,6 @@ class GoogleMapView {
   }
   remove() {
     this.places.clearLayers();
-    this.places.cluster.setMap(null);
     google.maps.event.clearInstanceListeners(this.native);
     this.native.getDiv().replaceChildren();
   }
