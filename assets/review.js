@@ -9,6 +9,16 @@ function locationReviewPath(change) {
   return change.drop ? "/api/location-drop" : "/api/location-review";
 }
 
+function locationReviewUrl(place) {
+  const target = new URL(place.maps_url);
+  if (!/^\/maps\/dir(?:\/|$)/.test(target.pathname)) return place.maps_url;
+  const point = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) ?
+    `${place.latitude},${place.longitude}` : "";
+  const description = [place.name || place.place_name, place.address, place.locality].filter(Boolean).join(" ");
+  const query = target.searchParams.get("destination") || point || description;
+  return "https://www.google.com/maps/search/?" + new URLSearchParams({api: "1", query});
+}
+
 function locationReviewControls(place, submit) {
   const add = (tag, text, parent) => {
     const element = document.createElement(tag);
@@ -32,7 +42,7 @@ function locationReviewControls(place, submit) {
     locationReviewDrafts.set(place.id, state);
   };
   const destination = add("a", "Check destination in Google Maps", details);
-  destination.href = place.maps_url;
+  destination.href = locationReviewUrl(place);
   destination.target = "_blank";
   destination.rel = "noopener noreferrer";
   add("p", "Open the destination and check the place. If it is wrong, paste the correct place's Google Maps share link below.", details);
