@@ -9,14 +9,29 @@ function locationReviewPath(change) {
   return change.drop ? "/api/location-drop" : "/api/location-review";
 }
 
+function coordinateGoogleQuery(value) {
+  return /^(?:loc:)?[+-]?\d+(?:\.\d+)?\s*,\s*[+-]?\d+(?:\.\d+)?$/.test(value.trim()) ||
+    (/[\u00b0'"\u2032\u2033]/.test(value) && /^[+-]?\d[\d\s.,+'"\-NSEW\u00b0\u2032\u2033]*$/i.test(value));
+}
+
 function locationReviewUrl(place) {
   const target = new URL(place.maps_url);
-  if (!/^\/maps\/dir(?:\/|$)/.test(target.pathname)) return place.maps_url;
-  const point = Number.isFinite(place.latitude) && Number.isFinite(place.longitude) ?
-    `${place.latitude},${place.longitude}` : "";
-  const description = [place.name || place.place_name, place.address, place.locality].filter(Boolean).join(" ");
-  const query = target.searchParams.get("destination") || point || description;
-  return "https://www.google.com/maps/search/?" + new URLSearchParams({api: "1", query});
+  const directions = /^\/maps\/dir(?:\/|$)/.test(target.pathname) ||
+    target.searchParams.has("daddr") || target.searchParams.get("dir_action") === "navigate";
+  const identified = ["cid", "ftid", "query_place_id", "place_id"].some(key => target.searchParams.get(key)) ||
+    /!1s(?:0x[0-9a-f]+:0x[0-9a-f]+|ChI[\w-]+)/i.test(target.pathname);
+  const rawLabel = target.pathname.match(/^\/maps\/place\/([^/]+)/)?.[1] || "";
+  // Google encodes its place paths with form-style '+' spaces and percent escapes.
+  const label = new URLSearchParams("name=" + rawLabel).get("name");
+  const query = target.searchParams.get("query") || target.searchParams.get("q");
+  if (!directions && (identified || label && !coordinateGoogleQuery(label) || query && !coordinateGoogleQuery(query))) {
+    return place.maps_url;
+  }
+  const description = [place.name || place.place_name, place.extracted_address, place.locality].filter(Boolean).join(" ");
+  const params = new URLSearchParams({api: "1", query: description});
+  const placeId = target.searchParams.get("destination_place_id");
+  if (placeId) params.set("query_place_id", placeId);
+  return "https://www.google.com/maps/search/?" + params;
 }
 
 function locationReviewControls(place, submit) {
@@ -93,7 +108,7 @@ function locationReviewControls(place, submit) {
       confirm.disabled = save.disabled = drop.disabled = input.disabled = false;
     }
   }
-  confirm.onclick = () => review({});
+  confirm.onclick = () => review({checked_url: destination.href});
   drop.onclick = () => review({drop: true});
   form.onsubmit = event => {
     event.preventDefault();

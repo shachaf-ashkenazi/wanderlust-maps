@@ -57,7 +57,7 @@ const decode = value => Uint8Array.from(atob(value), character => character.char
 const coordinates = place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) &&
   Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180;
 function navigationUrl(place) {
-  if (place.google_maps_confirmed && place.maps_url) return place.maps_url;
+  if (!coordinates(place) && place.google_maps_confirmed && place.maps_url) return locationReviewUrl(place);
   const destination = coordinates(place) ? `${place.latitude},${place.longitude}` :
     [place.name, place.address, place.locality].filter(Boolean).join(" ");
   const params = new URLSearchParams({api: "1", destination, dir_action: "navigate"});
@@ -174,11 +174,9 @@ function card(place, parent, sidebar = false) {
     link("Find / navigate with Google Maps", navigationUrl(place), actions);
   }
   if (place.source_url) link("Original recommendation", place.source_url, actions);
-  const search = new URLSearchParams({api: "1", query: [place.name, place.address, place.locality].filter(Boolean).join(" ")});
-  link("Save in Google Maps", place.google_maps_confirmed ? navigationUrl(place) :
-    "https://www.google.com/maps/search/?" + search, actions);
-  if (localMode) content.append(locationReviewControls({...place, maps_url: place.maps_url || navigationUrl(place)},
-    change => reviewPlace(place, change)));
+  const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
+  link("Save in Google Maps", locationReviewUrl(reviewTarget), actions);
+  if (localMode) content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change)));
   return article;
 }
 async function reviewPlace(place, change) {
