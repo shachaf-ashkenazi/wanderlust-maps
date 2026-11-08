@@ -60,7 +60,7 @@ function locationReviewControls(place, submit) {
   destination.href = locationReviewUrl(place);
   destination.target = "_blank";
   destination.rel = "noopener noreferrer";
-  add("p", "Open the destination and check the place. If it is wrong, paste the correct place's Google Maps share link below.", details);
+  add("p", "Check the place and branch. If the search is ambiguous or wrong, paste the selected place's Google Maps share link below.", details);
   const confirm = add("button", "This is the right place", details);
   confirm.type = "button";
   const form = add("form", "", details);
