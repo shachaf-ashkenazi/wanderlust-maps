@@ -17,28 +17,29 @@ let googleBusinessesVisible = true;
 let selectedPlaceId = null;
 const expandedPlaces = new Set();
 const collapsedSubjects = new Set();
+let publishedMapUrl = null;
 
 const subjects = {
   attractions: "Attractions", food: "Food & cafes", bars: "Bars", nature: "Parks & gardens",
   shopping: "Shopping", stays: "Stays", areas: "Streets & areas", other: "Other places",
 };
 const kinds = {
-  cafe: {label: "Cafe", symbol: "\u2615", tone: "food"},
-  restaurant: {label: "Restaurant", symbol: "\u{1F374}", tone: "food"},
-  food: {label: "Food", symbol: "\u{1F374}", tone: "food"},
-  bar: {label: "Bar", symbol: "\u{1F378}", tone: "food"},
-  bakery: {label: "Bakery", symbol: "\u{1F950}", tone: "food"},
-  hotel: {label: "Hotel", symbol: "\u{1F6CF}\uFE0F", tone: "stay"},
-  shop: {label: "Shop", symbol: "\u{1F6CD}\uFE0F", tone: "shop"},
-  museum: {label: "Museum", symbol: "\u{1F3DB}\uFE0F", tone: "culture"},
-  gallery: {label: "Gallery", symbol: "\u{1F3A8}", tone: "culture"},
-  zoo: {label: "Zoo", symbol: "\u{1F412}", tone: "nature"},
-  park: {label: "Park", symbol: "\u{1F333}", tone: "nature"},
-  garden: {label: "Garden", symbol: "\u{1F33F}", tone: "nature"},
-  street: {label: "Street", symbol: "\u{1F6B6}", tone: "area"},
-  neighborhood: {label: "Neighborhood", symbol: "\u{1F3D8}\uFE0F", tone: "area"},
-  attraction: {label: "Attraction", symbol: "\u{1F3F0}", tone: "culture"},
-  other: {label: "Place", symbol: "\u{1F4CD}", tone: "area"},
+  cafe: {label: "Cafe", symbol: "\u2615", tone: "food", exportColor: "#795548"},
+  restaurant: {label: "Restaurant", symbol: "\u{1F374}", tone: "food", exportColor: "#e65100"},
+  food: {label: "Food", symbol: "\u{1F374}", tone: "food", exportColor: "#ef6c00"},
+  bar: {label: "Bar", symbol: "\u{1F378}", tone: "food", exportColor: "#9c27b0"},
+  bakery: {label: "Bakery", symbol: "\u{1F950}", tone: "food", exportColor: "#f9a825"},
+  hotel: {label: "Hotel", symbol: "\u{1F6CF}\uFE0F", tone: "stay", exportColor: "#0288d1"},
+  shop: {label: "Shop", symbol: "\u{1F6CD}\uFE0F", tone: "shop", exportColor: "#d81b60"},
+  museum: {label: "Museum", symbol: "\u{1F3DB}\uFE0F", tone: "culture", exportColor: "#673ab7"},
+  gallery: {label: "Gallery", symbol: "\u{1F3A8}", tone: "culture", exportColor: "#8e24aa"},
+  zoo: {label: "Zoo", symbol: "\u{1F412}", tone: "nature", exportColor: "#43a047"},
+  park: {label: "Park", symbol: "\u{1F333}", tone: "nature", exportColor: "#0f9d58"},
+  garden: {label: "Garden", symbol: "\u{1F33F}", tone: "nature", exportColor: "#7cb342"},
+  street: {label: "Street", symbol: "\u{1F6B6}", tone: "area", exportColor: "#607d8b"},
+  neighborhood: {label: "Neighborhood", symbol: "\u{1F3D8}\uFE0F", tone: "area", exportColor: "#455a64"},
+  attraction: {label: "Attraction", symbol: "\u{1F3F0}", tone: "culture", exportColor: "#e53935"},
+  other: {label: "Place", symbol: "\u{1F4CD}", tone: "area", exportColor: "#616161"},
 };
 const kindOf = place => Object.hasOwn(kinds, place.kind) ? place.kind :
   Object.hasOwn(kinds, place.category) ? place.category : "other";
@@ -441,40 +442,89 @@ function locate() {
     if (map) render(false);
   }, {enableHighAccuracy: true, maximumAge: 30000, timeout: 15000});
 }
+function kmlElement(parent, name, value) {
+  const child = parent.ownerDocument.createElementNS(parent.namespaceURI, name);
+  if (value !== undefined) child.textContent = value;
+  parent.append(child);
+  return child;
+}
+function myMapsIconRoot() {
+  const base = localMode ? publishedMapUrl : location.protocol === "https:" ? location.href : null;
+  return base ? new URL("../assets/kml-icons/", base).href : null;
+}
+function kmlColor(kind) {
+  // KML colours are alpha-blue-green-red, rather than CSS RGB.
+  const rgb = kinds[kind].exportColor.slice(1);
+  return `ff${rgb.slice(4, 6)}${rgb.slice(2, 4)}${rgb.slice(0, 2)}`;
+}
+function kmlIconStyle(parent, kind, state, iconRoot) {
+  const style = kmlElement(parent, "Style");
+  style.setAttribute("id", `wanderlust-${kind}-${state}`);
+  const icon = kmlElement(style, "IconStyle");
+  // Hosted PNGs contain their own colours; tint only the plain-pin fallback.
+  kmlElement(icon, "color", iconRoot ? "ffffffff" : kmlColor(kind));
+  kmlElement(icon, "scale", state === "normal" ? ".75" : ".9");
+  kmlElement(kmlElement(icon, "Icon"), "href", iconRoot ? new URL(`${kind}.png`, iconRoot).href :
+    "https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png");
+  const spot = kmlElement(icon, "hotSpot");
+  for (const [key, value] of Object.entries({x: ".5", y: "0", xunits: "fraction", yunits: "fraction"})) {
+    spot.setAttribute(key, value);
+  }
+  const label = kmlElement(style, "LabelStyle");
+  kmlElement(label, "color", kmlColor(kind));
+  kmlElement(label, "scale", state === "normal" ? "0" : "1");
+}
+function kmlMarkerStyle(parent, kind, iconRoot) {
+  for (const state of ["normal", "highlight"]) kmlIconStyle(parent, kind, state, iconRoot);
+  const style = kmlElement(parent, "StyleMap");
+  style.setAttribute("id", `wanderlust-${kind}`);
+  for (const state of ["normal", "highlight"]) {
+    const pair = kmlElement(style, "Pair");
+    kmlElement(pair, "key", state);
+    kmlElement(pair, "styleUrl", `#wanderlust-${kind}-${state}`);
+  }
+}
+function myMapsKml(mapped, iconRoot) {
+  const xml = document.implementation.createDocument("http://www.opengis.net/kml/2.2", "kml");
+  const documentNode = kmlElement(xml.documentElement, "Document");
+  kmlElement(documentNode, "name", document.title);
+  if (iconRoot) kmlElement(documentNode, "description",
+    "Marker emoji artwork: Twemoji, CC BY 4.0. Coloured pin adaptation by Wanderlust. " + iconRoot + "NOTICE.txt");
+  for (const kind of new Set(mapped.map(kindOf))) kmlMarkerStyle(documentNode, kind, iconRoot);
+  for (const place of mapped) {
+    const placemark = kmlElement(documentNode, "Placemark");
+    kmlElement(placemark, "name", place.name);
+    kmlElement(placemark, "styleUrl", `#wanderlust-${kindOf(place)}`);
+    const description = [place.description, place.address, kinds[kindOf(place)].label, place.source_url].filter(Boolean).join("\n");
+    kmlElement(placemark, "description", description.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
+    const extended = kmlElement(placemark, "ExtendedData"), data = kmlElement(extended, "Data");
+    data.setAttribute("name", "Type");
+    kmlElement(data, "value", kinds[kindOf(place)].label);
+    if (iconRoot) {
+      const credit = kmlElement(extended, "Data");
+      credit.setAttribute("name", "Icon credit");
+      kmlElement(credit, "value", "Twemoji (CC BY 4.0); coloured pin adaptation by Wanderlust. " + iconRoot + "NOTICE.txt");
+    }
+    kmlElement(kmlElement(placemark, "Point"), "coordinates", `${place.longitude},${place.latitude},0`);
+  }
+  return new XMLSerializer().serializeToString(xml);
+}
 function downloadMyMaps() {
   const mapped = places.filter(coordinates);
   if (!mapped.length) {
     document.querySelector("#route-status").textContent = "No confirmed map pins to export yet.";
     return;
   }
-  const namespace = "http://www.opengis.net/kml/2.2";
-  const xml = document.implementation.createDocument(namespace, "kml");
-  const element = (parent, name, value) => {
-    const child = xml.createElementNS(namespace, name);
-    if (value !== undefined) child.textContent = value;
-    parent.append(child);
-    return child;
-  };
-  const documentNode = element(xml.documentElement, "Document");
-  element(documentNode, "name", document.title);
-  for (const place of mapped) {
-    const placemark = element(documentNode, "Placemark");
-    element(placemark, "name", place.name);
-    const description = [place.description, place.address, kinds[kindOf(place)].label, place.source_url].filter(Boolean).join("\n");
-    element(placemark, "description", description.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
-    const data = element(element(placemark, "ExtendedData"), "Data");
-    data.setAttribute("name", "Type");
-    element(data, "value", kinds[kindOf(place)].label);
-    element(element(placemark, "Point"), "coordinates", `${place.longitude},${place.latitude},0`);
-  }
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(xml)],
+  const iconRoot = myMapsIconRoot();
+  const url = URL.createObjectURL(new Blob([myMapsKml(mapped, iconRoot)],
     {type: "application/vnd.google-earth.kml+xml"}));
   const link = document.createElement("a");
   link.href = url;
   link.download = `wanderlust-${collectionId}.kml`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  document.querySelector("#route-status").textContent = `Downloaded ${mapped.length} mapped places. ${places.length - mapped.length} unmapped recommendations remain here. This file is unencrypted; import it into Google My Maps.`;
+  document.querySelector("#route-status").textContent = `Downloaded ${mapped.length} styled pins. ${places.length - mapped.length} unmapped recommendations remain here. Unencrypted; import into My Maps using Individual styles. ` +
+    (iconRoot ? "Category colours and emoji icons are included." : "Basic coloured pins; publish an encrypted map to enable emoji icons.");
 }
 function providerMessage(text, google = false) {
   const message = document.querySelector("#provider-status");
@@ -626,6 +676,7 @@ function lock() {
   document.querySelector("#passphrase").value = "";
   mapStatus("");
   document.querySelector("#provider-status").replaceChildren();
+  publishedMapUrl = null;
 }
 document.querySelector("#unlock").onsubmit = async event => {
   event.preventDefault();
@@ -736,6 +787,7 @@ function backgroundTaps(view) {
   });
 }
 function updateMapActions(payload) {
+  publishedMapUrl = payload.sharing?.url || null;
   document.querySelector("#share").hidden = !localMode || !payload.sharing?.url;
   const list = document.querySelector("#google-list-link");
   list.hidden = !payload.google_list_url;

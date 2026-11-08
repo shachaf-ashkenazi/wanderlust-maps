@@ -1,0 +1,11 @@
+Wanderlust KML marker icons
+
+Emoji artwork: Twemoji, copyright Twitter, Inc. and other contributors.
+Source: https://github.com/jdecked/twemoji/tree/v16.0.1/assets/svg
+Artwork license: Creative Commons Attribution 4.0 International (CC BY 4.0).
+License: https://creativecommons.org/licenses/by/4.0/
+The complete license is included in LICENSE.txt.
+
+Changes: the original SVG emoji artwork is rasterized onto coloured
+Wanderlust pin backgrounds. Type colours and emoji selections are defined
+in src/inbox/map_site/app.js. No trip data is included in these images.
