@@ -463,8 +463,8 @@ function kmlIconStyle(parent, kind, state, iconRoot) {
   const icon = kmlElement(style, "IconStyle");
   // Hosted PNGs contain their own colours; tint only the plain-pin fallback.
   kmlElement(icon, "color", iconRoot ? "ffffffff" : kmlColor(kind));
-  kmlElement(icon, "scale", state === "normal" ? ".75" : ".9");
-  kmlElement(kmlElement(icon, "Icon"), "href", iconRoot ? new URL(`${kind}.png`, iconRoot).href :
+  kmlElement(icon, "scale", state === "normal" ? "1" : "1.15");
+  kmlElement(kmlElement(icon, "Icon"), "href", iconRoot ? new URL(`${kind}.png?v=2`, iconRoot).href :
     "https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png");
   const spot = kmlElement(icon, "hotSpot");
   for (const [key, value] of Object.entries({x: ".5", y: "0", xunits: "fraction", yunits: "fraction"})) {
@@ -500,11 +500,6 @@ function myMapsKml(mapped, iconRoot) {
     const extended = kmlElement(placemark, "ExtendedData"), data = kmlElement(extended, "Data");
     data.setAttribute("name", "Type");
     kmlElement(data, "value", kinds[kindOf(place)].label);
-    if (iconRoot) {
-      const credit = kmlElement(extended, "Data");
-      credit.setAttribute("name", "Icon credit");
-      kmlElement(credit, "value", "Twemoji (CC BY 4.0); coloured pin adaptation by Wanderlust. " + iconRoot + "NOTICE.txt");
-    }
     kmlElement(kmlElement(placemark, "Point"), "coordinates", `${place.longitude},${place.latitude},0`);
   }
   return new XMLSerializer().serializeToString(xml);
