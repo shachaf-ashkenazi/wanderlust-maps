@@ -39,7 +39,7 @@ const googlePosition = point => Array.isArray(point) ? {lat: point[0], lng: poin
 function googlePlaceIcon(place) {
   const kind = kinds[kindOf(place)];
   const colors = {food: "#ad4b12", culture: "#7943a5", nature: "#20824c", stay: "#175caa",
-    shop: "#b33172", area: "#58677c"};
+    shop: "#b33172", area: "#58677c", play: "#d66a15"};
   const index = routeIds.indexOf(place.id);
   const badge = index < 0 ? "" : `<circle cx="35" cy="9" r="9" fill="#172f57"/>
     <text x="35" y="13" text-anchor="middle" fill="white" font-size="12">${index + 1}</text>`;

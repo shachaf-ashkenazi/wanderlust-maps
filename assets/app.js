@@ -44,6 +44,8 @@ const kinds = {
   garden: {label: "Garden", symbol: "\u{1F33F}", tone: "nature", exportColor: "#7cb342"},
   street: {label: "Street", symbol: "\u{1F6B6}", tone: "area", exportColor: "#607d8b"},
   neighborhood: {label: "Neighborhood", symbol: "\u{1F3D8}\uFE0F", tone: "area", exportColor: "#455a64"},
+  kids_activity: {label: "Children's activity", symbol: "\u{1F9F8}", tone: "play", exportColor: "#e53935"},
+  landmark: {label: "Landmark", symbol: "\u{1F3DB}\uFE0F", tone: "culture", exportColor: "#3949ab"},
   attraction: {label: "Attraction", symbol: "\u{1F3F0}", tone: "culture", exportColor: "#e53935"},
   other: {label: "Place", symbol: "\u{1F4CD}", tone: "area", exportColor: "#616161"},
 };
@@ -51,7 +53,7 @@ const kindOf = place => Object.hasOwn(kinds, place.kind) ? place.kind :
   Object.hasOwn(kinds, place.category) ? place.category : "other";
 function subjectOf(place) {
   const kind = kindOf(place);
-  if (["museum", "gallery", "zoo", "attraction"].includes(kind)) return "attractions";
+  if (["museum", "gallery", "zoo", "kids_activity", "landmark", "attraction"].includes(kind)) return "attractions";
   if (["cafe", "restaurant", "food", "bakery"].includes(kind)) return "food";
   if (kind === "bar") return "bars";
   if (["park", "garden"].includes(kind)) return "nature";
@@ -897,7 +899,10 @@ function setSidebar(open) {
   button.setAttribute("aria-label", open ? "Close places menu" : "Open places menu");
   button.setAttribute("aria-expanded", String(open));
 }
-document.querySelector("#toggle-sidebar").onclick = () => setSidebar(document.querySelector("#sidebar").hidden);
+document.querySelector("#map-header").onclick = event => {
+  if (event.target.closest("#toggle-day-plan, a") || document.querySelector("#toggle-sidebar").hidden) return;
+  setSidebar(document.querySelector("#sidebar").hidden);
+};
 document.querySelector("#close-sidebar").onclick = () => {
   setSidebar(false);
   document.querySelector("#toggle-sidebar").focus();

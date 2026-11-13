@@ -12,6 +12,8 @@ coloured Wanderlust pin backgrounds. The 48x60 image uses 32x32 symbols at
 (8,8). Type colours remain defined in src/inbox/map_site/app.js.
 These are Google-style custom icons, not Google Maps' proprietary markers.
 Christmas markets reuse the filled tree artwork from the park category.
+Children's activities reuse the filled castle artwork from the attraction category.
+Landmarks reuse the museum's filled building artwork with an indigo pin background.
 
 Legacy emoji icons (unprefixed PNG filenames, retained for earlier exports)
 
