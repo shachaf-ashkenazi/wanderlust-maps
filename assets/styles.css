@@ -4,11 +4,12 @@ body.map-open { height: 100dvh; overflow: hidden; }
 #map-header { position: fixed; z-index: 1100; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 12px;
   max-width: 420px; display: flex; gap: 12px; align-items: center; justify-content: space-between;
   padding: 10px 12px; border-radius: 14px; background: #fff; box-shadow: 0 2px 14px #17213726; }
-#map-header > div { min-width: 0; } #map-header button { flex-shrink: 0; min-height: 44px; }
+#map-header > div { min-width: 0; flex: 1; } #map-header button { flex-shrink: 0; min-height: 44px; }
+#toggle-day-plan { font-size: .85rem; padding: 8px; }
 h1 { font-size: 1.1rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #basemap-label { display: block; font-size: .75rem; color: #536078; } #basemap-label:empty { display: none; }
 #unlock { max-width: 440px; margin: 110px auto 24px; padding: 24px; background: white; border-radius: 14px; }
-input, button, select { font: inherit; padding: 10px; box-sizing: border-box; border-radius: 6px; border: 1px solid #9aa6b8; }
+input, button, select, textarea { font: inherit; padding: 10px; box-sizing: border-box; border-radius: 6px; border: 1px solid #9aa6b8; }
 input { width: 100%; margin: 8px 0; } button, a { cursor: pointer; } button { background: #fff; }
 #status { position: fixed; z-index: 1200; left: 12px; right: 12px; bottom: calc(32px + env(safe-area-inset-bottom));
   max-width: 480px; margin: 0 auto; padding: 12px; border-radius: 10px; background: #fff8df; color: #805100; pointer-events: none; }
@@ -83,10 +84,52 @@ summary { cursor: pointer; } summary:focus-visible { outline: 2px solid #2563eb;
 .marker-shop { --marker-color: #b33172; } .marker-area { --marker-color: #58677c; }
 .route-number { position: absolute; top: -10px; right: -9px; background: #172f57; color: white; border-radius: 50%;
   min-width: 18px; height: 18px; font: bold 12px/18px system-ui; text-align: center; }
+#day-plan { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain;
+  padding: calc(100px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
+  background: linear-gradient(160deg, #edf3fa, #f8f6f1); }
+.plan-workspace { max-width: 1080px; margin: auto; }
+.plan-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.plan-heading h2 { margin: 0; } .plan-heading p { max-width: 650px; color: #536078; line-height: 1.5; }
+.plan-heading button { flex-shrink: 0; min-height: 44px; }
+.plan-eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; font-weight: 650; }
+#day-plan-status { color: #536078; } #day-plan-status:empty { display: none; }
+#day-plan-empty { padding: 40px 24px; margin-top: 20px; text-align: center; border: 1px dashed #b4c3d6;
+  border-radius: 20px; background: #ffffffb3; color: #536078; }
+#day-plan-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 12px 0; }
+.plan-day { min-width: 0; display: flex; flex-direction: column; padding: 20px; border: 1px solid #dfe6ee;
+  border-radius: 20px; background: white; box-shadow: 0 4px 18px #1721370c; }
+.plan-day > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.plan-day > header > div { min-width: 0; overflow-wrap: anywhere; }
+.plan-day h3 { margin: 4px 0 12px; } .plan-date { margin: 0; color: #536078; font-size: .85rem; }
+.plan-edit { min-height: 44px; font-size: .85rem; }
+.plan-periods { flex: 1; }
+.plan-period { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; padding: 14px 0;
+  border-top: 1px solid #edf0f5; }
+.plan-period h4 { margin: 0; font-size: .85rem; color: #43536b; }
+.plan-period ul { margin: 0; padding-left: 18px; line-height: 1.5; overflow-wrap: anywhere; }
+.plan-period li + li { margin-top: 6px; }
+.plan-open-slot { margin: 0; color: #8792a3; font-size: .85rem; }
+.plan-hotel { padding: 16px; border-radius: 12px; background: #edf3fc; overflow-wrap: anywhere; }
+.plan-hotel h4 { margin: 0 0 6px; font-size: .8rem; color: #43536b; }
+.plan-hotel p { margin: 6px 0 0; white-space: pre-line; font-size: .9rem; }
+#day-editor { width: min(680px, calc(100vw - 24px)); max-height: calc(100dvh - 40px); overflow: auto;
+  box-sizing: border-box; padding: 24px; border: 0; border-radius: 18px; color: #182237; }
+#day-editor::backdrop { background: #17213788; }
+.plan-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 16px 0; }
+#day-editor label { display: block; font-size: .9rem; }
+#day-editor textarea { display: block; width: 100%; margin-top: 8px; resize: vertical; }
+#day-editor fieldset { border: 1px solid #d8dee8; border-radius: 12px; padding: 16px; }
+.plan-editor-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.plan-editor-actions button { min-height: 44px; } #save-plan-day { background: #174f9d; color: white; }
+#plan-edit-status { color: #a42525; } #plan-edit-status:empty { display: none; }
 @media (max-width: 700px) {
   aside { top: auto; left: 8px; right: 8px; bottom: calc(28px + env(safe-area-inset-bottom)); width: auto; max-height: 55dvh; }
   #unlock { margin: 100px 16px 24px; }
   #legend { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 2px 0 6px; }
   #legend button { flex-shrink: 0; white-space: nowrap; min-height: 44px; }
   #map-tools button, #map-tools > a { font-size: .85rem; padding: 8px; }
+  #day-plan { padding-left: 12px; padding-right: 12px; }
+  #day-plan-days, .plan-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .plan-heading { align-items: start; } .plan-heading > div { min-width: 0; }
+  .plan-day { padding: 16px; } #day-editor { padding: 16px; }
 }

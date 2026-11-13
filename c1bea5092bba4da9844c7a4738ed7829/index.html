@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="../assets/styles.css">
 
 <header id="map-header"><div><h1 id="title">Wanderlust</h1><small id="basemap-label"></small></div>
+<button id="toggle-day-plan" type="button" aria-controls="day-plan" aria-pressed="false" hidden>Daily plan</button>
 <button id="toggle-sidebar" type="button" aria-controls="sidebar" aria-expanded="false" hidden>Places</button></header>
 <form id="unlock">
 <h2>Unlock this collection</h2>
@@ -25,6 +26,17 @@
 <p id="status" role="status"></p>
 <main id="content" hidden>
 <section id="map" aria-label="Recommendation map"></section>
+<section id="day-plan" aria-labelledby="day-plan-title" hidden>
+<div class="plan-workspace">
+<div class="plan-heading"><div><p class="plan-eyebrow">One day at a time</p><h2 id="day-plan-title">Daily plan</h2>
+<p>Room for the day, without an hourly timetable. Each hotel belongs to the night of that date.</p></div>
+<button id="add-plan-day" type="button" hidden>Add a day</button></div>
+<p id="day-plan-status" role="status"></p>
+<div id="day-plan-empty"><h3>Your trip, day by day</h3><p>No days planned yet.</p>
+<p>Morning, noon, afternoon, evening and night, with a place to stay for each night. Add dates when you are ready.</p></div>
+<div id="day-plan-days"></div>
+</div>
+</section>
 <aside id="sidebar" aria-label="Places and map tools" hidden>
 <div class="panel-header"><h2>Places</h2><button id="close-sidebar" type="button" aria-label="Close places and map tools">Close</button></div>
 <label for="search" class="search-label">Search this collection</label><input id="search" type="search" placeholder="Search places" autocomplete="off">
@@ -64,6 +76,30 @@ Import a fresh layer to update it. If My Maps shows one style, choose Individual
 </div>
 <p id="count"></p><p id="review-note" class="export-note"></p><div id="places"></div></aside>
 </main>
+<dialog id="day-editor" aria-labelledby="day-editor-title">
+<form id="day-plan-form">
+<div class="plan-heading"><h2 id="day-editor-title">Plan a day</h2><button id="cancel-plan-day" type="button">Cancel</button></div>
+<div class="plan-editor-grid">
+<label>Date<input id="plan-date" type="date" required></label>
+<label>Day title <small>(optional)</small><input id="plan-title" placeholder="Give the day a theme"></label>
+</div>
+<p class="export-note">One activity per line. Leave any part of the day open.</p>
+<div class="plan-editor-grid">
+<label>Morning<textarea id="plan-morning" rows="3"></textarea></label>
+<label>Noon<textarea id="plan-noon" rows="3"></textarea></label>
+<label>Afternoon<textarea id="plan-afternoon" rows="3"></textarea></label>
+<label>Evening<textarea id="plan-evening" rows="3"></textarea></label>
+<label>Night<textarea id="plan-night" rows="3"></textarea></label>
+</div>
+<fieldset><legend>Hotel for this night</legend>
+<label>Hotel or accommodation<input id="plan-hotel" placeholder="Not decided yet"></label>
+<label>Stay notes<textarea id="plan-hotel-notes" rows="2" placeholder="Check-in, travel or other useful notes"></textarea></label>
+</fieldset>
+<p id="plan-edit-status" role="alert"></p>
+<div class="plan-editor-actions"><button id="remove-plan-day" type="button" hidden>Remove this day</button>
+<button id="save-plan-day" type="submit">Save day</button></div>
+</form>
+</dialog>
 <script type="importmap" nonce="">{"imports":{"leaflet":"../assets/leaflet-esm.js","maplibre-gl":"../assets/maplibre-gl.mjs"}}</script>
 <script id="map-bootstrap" type="module" nonce="" src="../assets/bootstrap.js"></script>
 </html>

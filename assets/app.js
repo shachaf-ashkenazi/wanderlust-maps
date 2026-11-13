@@ -18,6 +18,11 @@ let selectedPlaceId = null;
 const expandedPlaces = new Set();
 const collapsedSubjects = new Set();
 let publishedMapUrl = null;
+let dayPlan = null;
+let dayPlanView = false;
+let editingPlan = null;
+let editingDate = null;
+const dayPeriods = ["morning", "noon", "afternoon", "evening", "night"];
 
 const subjects = {
   attractions: "Attractions", food: "Food & cafes", bars: "Bars", nature: "Parks & gardens",
@@ -163,11 +168,13 @@ function card(place, parent, sidebar = false) {
       "Google Maps link checked by you. Its URL has no precise map pin; the recommendation is still saved." :
       "Not mapped yet: automatic lookup could not resolve a confident pin. The recommendation is saved.", content).className = "missing";
   }
+  const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
   const actions = node("div", "", content);
   actions.className = "place-actions";
   if (coordinates(place)) {
     link("Navigate in Google Maps", navigationUrl(place), actions);
-    node("button", "Show pin", actions).onclick = () => focusPlace(place);
+    if (sidebar) node("button", "Show pin", actions).onclick = () => focusPlace(place);
+    else link("Show in Google Maps", locationReviewUrl(reviewTarget), actions);
     const add = node("button", routeIds.includes(place.id) ? "Remove from route" : "Add to route", actions);
     add.className = "route-toggle";
     add.onclick = () => toggleStop(place.id);
@@ -175,7 +182,6 @@ function card(place, parent, sidebar = false) {
     link("Find / navigate with Google Maps", navigationUrl(place), actions);
   }
   if (place.source_url) link("Original recommendation", place.source_url, actions);
-  const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
   link("Save in Google Maps", locationReviewUrl(reviewTarget), actions);
   if (localMode) content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change)));
   return article;
@@ -606,6 +612,129 @@ async function startBasemap(availability) {
     freeBasemap(`Google was not retried: ${error.message}`);
   }
 }
+function planDate(value) {
+  return new Intl.DateTimeFormat("en-GB", {weekday: "long", day: "numeric", month: "short", year: "numeric",
+    timeZone: "UTC"}).format(new Date(value + "T12:00:00Z"));
+}
+function setDayPlanView(open) {
+  dayPlanView = open;
+  setSidebar(false);
+  document.querySelector("#day-plan").hidden = !open;
+  document.querySelector("#map").hidden = open;
+  document.querySelector("#toggle-sidebar").hidden = open;
+  const button = document.querySelector("#toggle-day-plan");
+  button.textContent = open ? "Back to map" : "Daily plan";
+  button.setAttribute("aria-pressed", String(open));
+  if (!open) map?.invalidateSize?.();
+}
+function renderPlanDay(day, index, parent) {
+  const card = node("article", "", parent);
+  card.className = "plan-day";
+  card.dataset.date = day.date;
+  const header = node("header", "", card), heading = node("div", "", header);
+  node("p", planDate(day.date), heading).className = "plan-date";
+  node("h3", day.title || `Day ${index + 1}`, heading);
+  if (localMode) {
+    const edit = node("button", "Edit day", header);
+    edit.type = "button";
+    edit.className = "plan-edit";
+    edit.onclick = () => openDayEditor(day.date);
+  }
+  const periods = node("div", "", card);
+  periods.className = "plan-periods";
+  for (const period of dayPeriods) renderPlanPeriod(period, day[period], periods);
+  const hotel = node("footer", "", card);
+  hotel.className = "plan-hotel";
+  node("h4", "Hotel for this night", hotel);
+  node("strong", day.hotel || "Hotel not set", hotel);
+  if (day.hotel_notes) node("p", day.hotel_notes, hotel);
+}
+function renderPlanPeriod(period, activities, parent) {
+  const section = node("section", "", parent);
+  section.className = "plan-period";
+  node("h4", period[0].toUpperCase() + period.slice(1), section);
+  if (!activities.length) {
+    node("p", "Open for plans", section).className = "plan-open-slot";
+    return;
+  }
+  const list = node("ul", "", section);
+  for (const activity of activities) node("li", activity, list);
+}
+function updateDayPlan(payload) {
+  const next = payload.day_plan || {revision: 0, days: []};
+  if (dayPlan && next.revision < dayPlan.revision) return;
+  if (JSON.stringify(next) === JSON.stringify(dayPlan)) return;
+  dayPlan = next;
+  const list = document.querySelector("#day-plan-days");
+  list.replaceChildren();
+  dayPlan.days.forEach((day, index) => renderPlanDay(day, index, list));
+  document.querySelector("#day-plan-empty").hidden = dayPlan.days.length > 0;
+  document.querySelector("#add-plan-day").hidden = !localMode;
+  document.querySelector("#day-plan-status").textContent = localMode ?
+    "Saved per trip. Shared maps show a read-only copy after publishing." :
+    "Read-only trip plan. Changes are made in the local app and shared with the next update.";
+}
+function openDayEditor(date = null) {
+  if (!localMode) return;
+  editingPlan = structuredClone(dayPlan);
+  editingDate = date;
+  const day = editingPlan.days.find(day => day.date === date) || {};
+  const form = document.querySelector("#day-plan-form");
+  form.reset();
+  for (const field of ["date", "title", "hotel", "hotel-notes"]) {
+    document.querySelector("#plan-" + field).value = day[field.replace("-", "_")] || "";
+  }
+  for (const period of dayPeriods) document.querySelector("#plan-" + period).value = (day[period] || []).join("\n");
+  document.querySelector("#day-editor-title").textContent = date ? "Edit your day" : "Add a day";
+  document.querySelector("#remove-plan-day").hidden = !date;
+  document.querySelector("#plan-edit-status").textContent = "";
+  document.querySelector("#day-editor").showModal();
+}
+function editedDay() {
+  const day = {};
+  for (const field of ["date", "title", "hotel", "hotel-notes"]) {
+    day[field.replace("-", "_")] = document.querySelector("#plan-" + field).value;
+  }
+  for (const period of dayPeriods) {
+    day[period] = document.querySelector("#plan-" + period).value.split("\n").map(line => line.trim()).filter(Boolean);
+  }
+  return day;
+}
+async function saveDayEditor(remove = false) {
+  const button = document.querySelector("#save-plan-day");
+  const removeButton = document.querySelector("#remove-plan-day");
+  button.disabled = removeButton.disabled = true;
+  document.querySelector("#plan-edit-status").textContent = "";
+  try {
+    const days = editingPlan.days.filter(day => day.date !== editingDate);
+    if (!remove) days.push(editedDay());
+    const response = await fetch("/api/day-plan", {method: "POST",
+      headers: {"Content-Type": "application/json",
+        "X-Inbox-Token": document.querySelector('meta[name="map-token"]').content},
+      body: JSON.stringify({collection: collectionId, revision: editingPlan.revision, days})});
+    const saved = await response.json();
+    if (!response.ok) throw new Error(saved.error || "The daily plan could not be saved.");
+    updateDayPlan({day_plan: saved});
+    document.querySelector("#day-editor").close();
+  } catch (error) {
+    document.querySelector("#plan-edit-status").textContent = error.message;
+  } finally { button.disabled = removeButton.disabled = false; }
+}
+document.querySelector("#toggle-day-plan").onclick = () => setDayPlanView(!dayPlanView);
+document.querySelector("#add-plan-day").onclick = () => openDayEditor();
+document.querySelector("#cancel-plan-day").onclick = () => document.querySelector("#day-editor").close();
+document.querySelector("#day-editor").onclose = () => {
+  editingPlan = null;
+  editingDate = null;
+  document.querySelector("#day-plan-form").reset();
+};
+document.querySelector("#day-plan-form").onsubmit = event => {
+  event.preventDefault();
+  saveDayEditor();
+};
+document.querySelector("#remove-plan-day").onclick = () => {
+  if (confirm("Remove this day and its activities and hotel from the plan?")) saveDayEditor(true);
+};
 async function show(payload, fitBounds = true) {
   if (payload.collection_id !== collectionId || !Array.isArray(payload.places)) throw new Error("Collection mismatch.");
   const sameStop = (old, next) => next && old.name === next.name && old.latitude === next.latitude && old.longitude === next.longitude;
@@ -620,7 +749,9 @@ async function show(payload, fitBounds = true) {
   document.querySelector("#lock").hidden = localMode;
   document.querySelector("#content").hidden = false;
   document.body.classList.add("map-open");
-  document.querySelector("#toggle-sidebar").hidden = false;
+  document.querySelector("#toggle-sidebar").hidden = dayPlanView;
+  document.querySelector("#toggle-day-plan").hidden = false;
+  updateDayPlan(payload);
   document.querySelector("#review-note").textContent = localMode ?
     "Checked places leave the review queue; saved pins stay on the map. Public updates follow publishing. Google saved lists are unchanged." :
     "Read-only snapshot. Check or correct destinations in the local app; published updates include saved reviews.";
@@ -635,6 +766,15 @@ async function show(payload, fitBounds = true) {
   render(fitBounds);
 }
 function lock() {
+  document.querySelector("#day-editor").close();
+  document.querySelector("#day-plan-form").reset();
+  document.querySelector("#day-plan-days").replaceChildren();
+  document.querySelector("#day-plan-status").textContent = "";
+  document.querySelector("#plan-edit-status").textContent = "";
+  dayPlan = editingPlan = null;
+  editingDate = null;
+  setDayPlanView(false);
+  document.querySelector("#toggle-day-plan").hidden = true;
   stopLocation();
   routeIds = [];
   renderRoute();
@@ -773,7 +913,7 @@ function backgroundTaps(view) {
     if (dragging || performance.now() < ignoreUntil || event.placeId || original?.detail > 1 ||
         target?.closest(".leaflet-popup, .leaflet-marker-icon, .leaflet-control, button, a, input, select")) return;
     timer = setTimeout(() => {
-      if (map === view && !dragging && !document.querySelector("#content").hidden) {
+      if (map === view && !dragging && !dayPlanView && !document.querySelector("#content").hidden) {
         const place = basemap?.placeAt?.(event);
         if (place) { showOrdinaryPlace(place); return; }
         setSidebar(document.querySelector("#sidebar").hidden);
@@ -799,6 +939,7 @@ async function loadLocal() {
       await show(payload, !places.some(coordinates));
     }
     updateMapActions(payload);
+    updateDayPlan(payload);
     if (document.querySelector("#provider-status").dataset.provider === "google") {
       if (payload.basemap.enabled) googleUsage(payload.basemap.usage);
       else freeBasemap(`Google stopped: ${payload.basemap.reason}`);
