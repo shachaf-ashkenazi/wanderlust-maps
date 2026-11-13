@@ -464,7 +464,7 @@ function kmlIconStyle(parent, kind, state, iconRoot) {
   // Hosted PNGs contain their own colours; tint only the plain-pin fallback.
   kmlElement(icon, "color", iconRoot ? "ffffffff" : kmlColor(kind));
   kmlElement(icon, "scale", state === "normal" ? "1" : "1.15");
-  kmlElement(kmlElement(icon, "Icon"), "href", iconRoot ? new URL(`${kind}.png?v=2`, iconRoot).href :
+  kmlElement(kmlElement(icon, "Icon"), "href", iconRoot ? new URL(`material-${kind}.png?v=1`, iconRoot).href :
     "https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png");
   const spot = kmlElement(icon, "hotSpot");
   for (const [key, value] of Object.entries({x: ".5", y: "0", xunits: "fraction", yunits: "fraction"})) {
@@ -489,7 +489,7 @@ function myMapsKml(mapped, iconRoot) {
   const documentNode = kmlElement(xml.documentElement, "Document");
   kmlElement(documentNode, "name", document.title);
   if (iconRoot) kmlElement(documentNode, "description",
-    "Marker emoji artwork: Twemoji, CC BY 4.0. Coloured pin adaptation by Wanderlust. " + iconRoot + "NOTICE.txt");
+    "Marker artwork: Google Material Icons, Apache-2.0. Coloured pin adaptation by Wanderlust. " + iconRoot + "NOTICE.txt");
   for (const kind of new Set(mapped.map(kindOf))) kmlMarkerStyle(documentNode, kind, iconRoot);
   for (const place of mapped) {
     const placemark = kmlElement(documentNode, "Placemark");
@@ -519,7 +519,7 @@ function downloadMyMaps() {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   document.querySelector("#route-status").textContent = `Downloaded ${mapped.length} styled pins. ${places.length - mapped.length} unmapped recommendations remain here. Unencrypted; import into My Maps using Individual styles. ` +
-    (iconRoot ? "Category colours and emoji icons are included." : "Basic coloured pins; publish an encrypted map to enable emoji icons.");
+    (iconRoot ? "Category colours and Google-style icons are included." : "Basic coloured pins; publish an encrypted map to enable Google-style category icons.");
 }
 function providerMessage(text, google = false) {
   const message = document.querySelector("#provider-status");

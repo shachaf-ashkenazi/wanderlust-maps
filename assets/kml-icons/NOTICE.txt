@@ -1,5 +1,19 @@
 Wanderlust KML marker icons
 
+Google-style category icons (material-*.png)
+
+Artwork: Google Material Icons, copyright Google LLC.
+Source: https://github.com/google/material-design-icons/tree/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/src
+Artwork license: Apache License, Version 2.0.
+The complete license is included in LICENSE-MATERIAL.txt.
+
+Changes: filled SVG symbols are recoloured white and rasterized onto solid
+coloured Wanderlust pin backgrounds. The 48x60 image uses 32x32 symbols at
+(8,8). Type colours remain defined in src/inbox/map_site/app.js.
+These are Google-style custom icons, not Google Maps' proprietary markers.
+
+Legacy emoji icons (unprefixed PNG filenames, retained for earlier exports)
+
 Emoji artwork: Twemoji, copyright Twitter, Inc. and other contributors.
 Source: https://github.com/jdecked/twemoji/tree/v16.0.1/assets/svg
 Artwork license: Creative Commons Attribution 4.0 International (CC BY 4.0).
