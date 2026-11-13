@@ -6,6 +6,7 @@ body.map-open { height: 100dvh; overflow: hidden; }
   padding: 10px 12px; border-radius: 14px; background: #fff; box-shadow: 0 2px 14px #17213726; }
 #map-header > div { min-width: 0; flex: 1; } #map-header button { flex-shrink: 0; min-height: 44px; }
 #toggle-day-plan { font-size: .85rem; padding: 8px; }
+#toggle-sidebar { display: grid; place-items: center; width: 44px; padding: 8px; }
 h1 { font-size: 1.1rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #basemap-label { display: block; font-size: .75rem; color: #536078; } #basemap-label:empty { display: none; }
 #unlock { max-width: 440px; margin: 110px auto 24px; padding: 24px; background: white; border-radius: 14px; }

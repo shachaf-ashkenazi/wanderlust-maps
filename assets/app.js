@@ -36,6 +36,7 @@ const kinds = {
   bakery: {label: "Bakery", symbol: "\u{1F950}", tone: "food", exportColor: "#f9a825"},
   hotel: {label: "Hotel", symbol: "\u{1F6CF}\uFE0F", tone: "stay", exportColor: "#0288d1"},
   shop: {label: "Shop", symbol: "\u{1F6CD}\uFE0F", tone: "shop", exportColor: "#d81b60"},
+  christmas_market: {label: "Christmas market", symbol: "\u{1F384}", tone: "nature", exportColor: "#0f9d58"},
   museum: {label: "Museum", symbol: "\u{1F3DB}\uFE0F", tone: "culture", exportColor: "#673ab7"},
   gallery: {label: "Gallery", symbol: "\u{1F3A8}", tone: "culture", exportColor: "#8e24aa"},
   zoo: {label: "Zoo", symbol: "\u{1F412}", tone: "nature", exportColor: "#43a047"},
@@ -54,7 +55,7 @@ function subjectOf(place) {
   if (["cafe", "restaurant", "food", "bakery"].includes(kind)) return "food";
   if (kind === "bar") return "bars";
   if (["park", "garden"].includes(kind)) return "nature";
-  if (kind === "shop") return "shopping";
+  if (["shop", "christmas_market"].includes(kind)) return "shopping";
   if (kind === "hotel") return "stays";
   return ["street", "neighborhood"].includes(kind) ? "areas" : "other";
 }
@@ -62,6 +63,11 @@ function subjectOf(place) {
 const decode = value => Uint8Array.from(atob(value), character => character.charCodeAt(0));
 const coordinates = place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude) &&
   Math.abs(place.latitude) <= 90 && Math.abs(place.longitude) <= 180;
+function placeDescription(place) {
+  return (place.description || "").split(/\n\s*\n/)
+    .filter(paragraph => !/^(?:Research checked\b|Source:)/i.test(paragraph.trim()))
+    .join("\n\n").trim();
+}
 function navigationUrl(place) {
   if (!coordinates(place) && place.google_maps_confirmed && place.maps_url) return locationReviewUrl(place);
   const destination = coordinates(place) ? `${place.latitude},${place.longitude}` :
@@ -151,11 +157,11 @@ function card(place, parent, sidebar = false) {
   node("span", `${kind.symbol} ${kind.label}`, heading).className = "place-type";
   node("span", locationReviewLabel(place), heading).className =
     "review-badge" + (place.google_maps_confirmed ? " is-confirmed" : "");
-  if (place.description) {
-    const description = node("p", place.description, content);
+  const descriptionText = placeDescription(place);
+  if (descriptionText) {
+    const description = node("p", descriptionText, content);
     description.className = "description";
     description.dir = "auto";
-    node("small", "From the shared recommendation; not a current business listing.", content).className = "place-type";
   }
   node("p", place.address || "Address not supplied", content).dir = "auto";
   if (userPosition && coordinates(place)) {
@@ -501,7 +507,7 @@ function myMapsKml(mapped, iconRoot) {
     const placemark = kmlElement(documentNode, "Placemark");
     kmlElement(placemark, "name", place.name);
     kmlElement(placemark, "styleUrl", `#wanderlust-${kindOf(place)}`);
-    const description = [place.description, place.address, kinds[kindOf(place)].label, place.source_url].filter(Boolean).join("\n");
+    const description = [placeDescription(place), place.address, kinds[kindOf(place)].label, place.source_url].filter(Boolean).join("\n");
     kmlElement(placemark, "description", description.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"));
     const extended = kmlElement(placemark, "ExtendedData"), data = kmlElement(extended, "Data");
     data.setAttribute("name", "Type");
@@ -870,7 +876,7 @@ function setSidebar(open) {
   document.querySelector("#sidebar").hidden = !open;
   document.body.classList.toggle("menu-open", open);
   const button = document.querySelector("#toggle-sidebar");
-  button.textContent = open ? "Close" : "Places";
+  button.setAttribute("aria-label", open ? "Close places menu" : "Open places menu");
   button.setAttribute("aria-expanded", String(open));
 }
 document.querySelector("#toggle-sidebar").onclick = () => setSidebar(document.querySelector("#sidebar").hidden);
@@ -916,7 +922,6 @@ function backgroundTaps(view) {
       if (map === view && !dragging && !dayPlanView && !document.querySelector("#content").hidden) {
         const place = basemap?.placeAt?.(event);
         if (place) { showOrdinaryPlace(place); return; }
-        setSidebar(document.querySelector("#sidebar").hidden);
       }
     }, 220);
   });
