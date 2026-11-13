@@ -189,8 +189,26 @@ function card(place, parent, sidebar = false) {
   }
   if (place.source_url) link("Original recommendation", place.source_url, actions);
   link("Save in Google Maps", locationReviewUrl(reviewTarget), actions);
-  if (localMode) content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change)));
+  if (localMode) {
+    const remove = node("button", "Remove recommendation", actions);
+    remove.type = "button";
+    remove.className = "remove-recommendation";
+    remove.onclick = () => removeRecommendation(reviewTarget, remove);
+    content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change)));
+  }
   return article;
+}
+async function removeRecommendation(place, button) {
+  if (!confirm(`Remove "${place.name}" from this trip?\n\nIts source post and Google saved list will be kept.`)) return;
+  button.disabled = true;
+  try {
+    await reviewPlace(place, {expected_url: place.maps_url, drop: true});
+    locationReviewDrafts.delete(place.id);
+  } catch (error) {
+    mapStatus(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
 }
 async function reviewPlace(place, change) {
   const [id, index] = place.id.split(":").map(Number);
