@@ -175,7 +175,11 @@ function card(place, parent, sidebar = false) {
   const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
   if (!coordinates(place)) {
     if (localMode) content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change), {compact: true}));
-    else link("Google Maps", locationReviewUrl(reviewTarget), content).className = "place-actions";
+    else {
+      const actions = node("div", "", content);
+      actions.className = "place-actions";
+      link("Google Maps", locationReviewUrl(reviewTarget), actions);
+    }
     return article;
   }
   const actions = node("div", "", content);

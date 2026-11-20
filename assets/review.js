@@ -64,34 +64,34 @@ function locationReviewControls(place, submit, {compact = false} = {}) {
   const confirm = add("button", compact ? "Approve" : "This is the right place", actions);
   confirm.type = "button";
   if (!compact) {
-  const form = add("form", "", details);
-  form.className = "location-review-form";
-  const label = add("label", "Correct Google Maps URL", form);
-  const input = add("input", "", label);
-  input.type = "url";
-  input.className = "review-url";
-  input.placeholder = "https://maps.app.goo.gl/...";
-  input.autocomplete = "off";
-  input.maxLength = 8192;
-  input.required = true;
-  input.value = state.url;
-  input.oninput = () => {
-    state.url = input.value;
-    state.open = details.open;
-    locationReviewDrafts.set(place.id, state);
-  };
-  const save = add("button", "Use this Google Maps link", form);
-  save.type = "submit";
-  add("small", "We use the place location, never the map camera. A link without a precise location is retained without inventing a pin.", details);
-  add("p", "Already added or cannot find it? Drop just this recommendation. Its source post and your Google saved list stay unchanged.", details);
-  const drop = add("button", "Cancel / drop recommendation", details);
-  drop.type = "button";
-  drop.className = "review-drop";
-  drop.onclick = () => review({drop: true});
-  form.onsubmit = event => {
-    event.preventDefault();
-    review({url: input.value.trim()});
-  };
+    const form = add("form", "", details);
+    form.className = "location-review-form";
+    const label = add("label", "Correct Google Maps URL", form);
+    const input = add("input", "", label);
+    input.type = "url";
+    input.className = "review-url";
+    input.placeholder = "https://maps.app.goo.gl/...";
+    input.autocomplete = "off";
+    input.maxLength = 8192;
+    input.required = true;
+    input.value = state.url;
+    input.oninput = () => {
+      state.url = input.value;
+      state.open = details.open;
+      locationReviewDrafts.set(place.id, state);
+    };
+    const save = add("button", "Use this Google Maps link", form);
+    save.type = "submit";
+    add("small", "We use the place location, never the map camera. A link without a precise location is retained without inventing a pin.", details);
+    add("p", "Already added or cannot find it? Drop just this recommendation. Its source post and your Google saved list stay unchanged.", details);
+    const drop = add("button", "Cancel / drop recommendation", details);
+    drop.type = "button";
+    drop.className = "review-drop";
+    drop.onclick = () => review({drop: true});
+    form.onsubmit = event => {
+      event.preventDefault();
+      review({url: input.value.trim()});
+    };
   }
   const feedback = add("p", "", details);
   feedback.className = "review-feedback";
