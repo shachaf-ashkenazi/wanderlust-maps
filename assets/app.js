@@ -170,7 +170,7 @@ function card(place, parent, sidebar = false) {
       content).className = "distance";
   }
   if (!coordinates(place)) {
-    node("p", "Saved without a map pin. Open Google Maps to verify the place.", content).className = "missing";
+    node("p", "Not mapped yet. Open Google Maps to verify the place.", content).className = "missing";
   }
   const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
   if (!coordinates(place)) {
