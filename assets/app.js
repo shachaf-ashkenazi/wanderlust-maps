@@ -653,38 +653,55 @@ function setDayPlanView(open) {
   button.setAttribute("aria-pressed", String(open));
   if (!open) map?.invalidateSize?.();
 }
-function renderPlanDay(day, index, parent) {
-  const card = node("article", "", parent);
-  card.className = "plan-day";
-  card.dataset.date = day.date;
-  const header = node("header", "", card), heading = node("div", "", header);
-  node("p", planDate(day.date), heading).className = "plan-date";
-  node("h3", day.title || `Day ${index + 1}`, heading);
+function renderPlanHeading(day, index, row) {
+  const cell = node("th", "", row);
+  cell.scope = "col";
+  cell.dataset.date = day.date;
+  const heading = node(localMode ? "button" : "div", "", cell);
   if (localMode) {
-    const edit = node("button", "Edit day", header);
-    edit.type = "button";
-    edit.className = "plan-edit";
-    edit.onclick = () => openDayEditor(day.date);
+    heading.type = "button";
+    heading.className = "plan-edit";
+    heading.setAttribute("aria-label", `Edit ${planDate(day.date)}`);
+    heading.onclick = () => openDayEditor(day.date);
   }
-  const periods = node("div", "", card);
-  periods.className = "plan-periods";
-  for (const period of dayPeriods) renderPlanPeriod(period, day[period], periods);
-  const hotel = node("footer", "", card);
+  node("time", planDate(day.date), heading).dateTime = day.date;
+  node("strong", day.title || `Day ${index + 1}`, heading);
+}
+function renderPlanHotel(day, row) {
+  const hotel = node("td", "", row);
   hotel.className = "plan-hotel";
-  node("h4", "Hotel for this night", hotel);
+  hotel.dataset.date = day.date;
   node("strong", day.hotel || "Hotel not set", hotel);
   if (day.hotel_notes) node("p", day.hotel_notes, hotel);
 }
-function renderPlanPeriod(period, activities, parent) {
-  const section = node("section", "", parent);
-  section.className = "plan-period";
-  node("h4", period[0].toUpperCase() + period.slice(1), section);
+function renderPlanPeriod(day, period, row) {
+  const cell = node("td", "", row), activities = day[period];
+  cell.className = "plan-period";
+  cell.dataset.date = day.date;
   if (!activities.length) {
-    node("p", "Open for plans", section).className = "plan-open-slot";
+    node("p", "Open for plans", cell).className = "plan-open-slot";
     return;
   }
-  const list = node("ul", "", section);
+  const list = node("ul", "", cell);
   for (const activity of activities) node("li", activity, list);
+}
+function renderPlanCalendar(parent) {
+  const table = node("table", "", parent);
+  table.className = "plan-calendar";
+  node("caption", "Daily plan by date and part of the day", table);
+  const heading = node("tr", "", node("thead", "", table));
+  node("th", "Part of day", heading).scope = "col";
+  dayPlan.days.forEach((day, index) => renderPlanHeading(day, index, heading));
+  const body = node("tbody", "", table);
+  for (const period of dayPeriods) {
+    const row = node("tr", "", body);
+    row.dataset.period = period;
+    node("th", period[0].toUpperCase() + period.slice(1), row).scope = "row";
+    for (const day of dayPlan.days) renderPlanPeriod(day, period, row);
+  }
+  const hotels = node("tr", "", node("tfoot", "", table));
+  node("th", "Hotel for this night", hotels).scope = "row";
+  for (const day of dayPlan.days) renderPlanHotel(day, hotels);
 }
 function updateDayPlan(payload) {
   const next = payload.day_plan || {revision: 0, days: []};
@@ -692,12 +709,15 @@ function updateDayPlan(payload) {
   if (JSON.stringify(next) === JSON.stringify(dayPlan)) return;
   dayPlan = next;
   const list = document.querySelector("#day-plan-days");
+  const {scrollLeft, scrollTop} = list;
   list.replaceChildren();
-  dayPlan.days.forEach((day, index) => renderPlanDay(day, index, list));
+  if (dayPlan.days.length) renderPlanCalendar(list);
+  list.scrollLeft = scrollLeft;
+  list.scrollTop = scrollTop;
   document.querySelector("#day-plan-empty").hidden = dayPlan.days.length > 0;
   document.querySelector("#add-plan-day").hidden = !localMode;
   document.querySelector("#day-plan-status").textContent = localMode ?
-    "Saved per trip. Shared maps show a read-only copy after publishing." :
+    "Select a date heading to edit. Saved per trip; shared maps show a read-only copy after publishing." :
     "Read-only trip plan. Changes are made in the local app and shared with the next update.";
 }
 function openDayEditor(date = null) {
