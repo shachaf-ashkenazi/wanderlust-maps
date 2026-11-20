@@ -1,10 +1,6 @@
 "use strict";
 const locationReviewDrafts = new Map();
 
-function locationReviewLabel(place) {
-  return place.google_maps_confirmed ? "Checked by you" : "Needs checking";
-}
-
 function locationReviewPath(change) {
   return change.drop ? "/api/location-drop" : "/api/location-review";
 }
@@ -34,7 +30,7 @@ function locationReviewUrl(place) {
   return "https://www.google.com/maps/search/?" + params;
 }
 
-function locationReviewControls(place, submit) {
+function locationReviewControls(place, submit, {compact = false} = {}) {
   const add = (tag, text, parent) => {
     const element = document.createElement(tag);
     element.textContent = text;
@@ -42,27 +38,32 @@ function locationReviewControls(place, submit) {
     return element;
   };
   const state = locationReviewDrafts.get(place.id) || {url: "", open: false, busy: false};
-  const details = document.createElement("details");
-  details.className = "location-review";
-  details.open = state.open;
-  details.ontoggle = event => {
-    if (event.target === details && details.isConnected) {
-      state.open = details.open;
+  const details = document.createElement(compact ? "div" : "details");
+  details.className = compact ? "location-approval" : "location-review";
+  if (!compact) {
+    details.open = state.open;
+    details.ontoggle = event => {
+      if (event.target === details && details.isConnected) {
+        state.open = details.open;
+        locationReviewDrafts.set(place.id, state);
+      }
+    };
+    const summary = add("summary", "Check / correct Google Maps location", details);
+    summary.onclick = () => {
+      state.open = !details.open;
       locationReviewDrafts.set(place.id, state);
-    }
-  };
-  const summary = add("summary", "Check / correct Google Maps location", details);
-  summary.onclick = () => {
-    state.open = !details.open;
-    locationReviewDrafts.set(place.id, state);
-  };
-  const destination = add("a", "Check destination in Google Maps", details);
+    };
+  }
+  const actions = compact ? add("div", "", details) : details;
+  if (compact) actions.className = "place-actions";
+  const destination = add("a", compact ? "Google Maps" : "Check destination in Google Maps", actions);
   destination.href = locationReviewUrl(place);
   destination.target = "_blank";
   destination.rel = "noopener noreferrer";
-  add("p", "Check the place and branch. If the search is ambiguous or wrong, paste the selected place's Google Maps share link below.", details);
-  const confirm = add("button", "This is the right place", details);
+  if (!compact) add("p", "Check the place and branch. If the search is ambiguous or wrong, paste the selected place's Google Maps share link below.", details);
+  const confirm = add("button", compact ? "Approve" : "This is the right place", actions);
   confirm.type = "button";
+  if (!compact) {
   const form = add("form", "", details);
   form.className = "location-review-form";
   const label = add("label", "Correct Google Maps URL", form);
@@ -86,33 +87,34 @@ function locationReviewControls(place, submit) {
   const drop = add("button", "Cancel / drop recommendation", details);
   drop.type = "button";
   drop.className = "review-drop";
+  drop.onclick = () => review({drop: true});
+  form.onsubmit = event => {
+    event.preventDefault();
+    review({url: input.value.trim()});
+  };
+  }
   const feedback = add("p", "", details);
   feedback.className = "review-feedback";
   feedback.setAttribute("role", "status");
   async function review(correction) {
     if (state.busy) return;
     state.busy = true;
-    confirm.disabled = save.disabled = drop.disabled = input.disabled = true;
+    for (const control of details.querySelectorAll("button, input")) control.disabled = true;
     feedback.textContent = "Saving your review...";
     feedback.setAttribute("role", "status");
     try {
       const saved = await submit({expected_url: place.maps_url, ...correction});
       locationReviewDrafts.delete(place.id);
-      feedback.textContent = saved.dropped ? "Recommendation dropped." : saved.mapped ? "Location checked and saved." :
-        "Google Maps link checked and saved. No precise map pin is available from this link.";
+      feedback.textContent = saved.dropped ? "Recommendation dropped." : saved.mapped ? "Location approved and saved." :
+        "Approved. No precise map pin is available from this link.";
     } catch (error) {
       feedback.setAttribute("role", "alert");
       feedback.textContent = error.message;
     } finally {
       state.busy = false;
-      confirm.disabled = save.disabled = drop.disabled = input.disabled = false;
+      for (const control of details.querySelectorAll("button, input")) control.disabled = false;
     }
   }
   confirm.onclick = () => review({checked_url: destination.href});
-  drop.onclick = () => review({drop: true});
-  form.onsubmit = event => {
-    event.preventDefault();
-    review({url: input.value.trim()});
-  };
   return details;
 }

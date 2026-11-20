@@ -157,8 +157,6 @@ function card(place, parent, sidebar = false) {
   node("h3", place.name, heading).dir = "auto";
   const kind = kinds[kindOf(place)];
   node("span", `${kind.symbol} ${kind.label}`, heading).className = "place-type";
-  node("span", locationReviewLabel(place), heading).className =
-    "review-badge" + (place.google_maps_confirmed ? " is-confirmed" : "");
   const descriptionText = placeDescription(place);
   if (descriptionText) {
     const description = node("p", descriptionText, content);
@@ -172,23 +170,22 @@ function card(place, parent, sidebar = false) {
       content).className = "distance";
   }
   if (!coordinates(place)) {
-    node("p", place.google_maps_confirmed ?
-      "Google Maps link checked by you. Its URL has no precise map pin; the recommendation is still saved." :
-      "Not mapped yet: automatic lookup could not resolve a confident pin. The recommendation is saved.", content).className = "missing";
+    node("p", "Saved without a map pin. Open Google Maps to verify the place.", content).className = "missing";
   }
   const reviewTarget = {...place, maps_url: place.maps_url || navigationUrl(place)};
+  if (!coordinates(place)) {
+    if (localMode) content.append(locationReviewControls(reviewTarget, change => reviewPlace(place, change), {compact: true}));
+    else link("Google Maps", locationReviewUrl(reviewTarget), content).className = "place-actions";
+    return article;
+  }
   const actions = node("div", "", content);
   actions.className = "place-actions";
-  if (coordinates(place)) {
-    link("Navigate in Google Maps", navigationUrl(place), actions);
-    if (sidebar) node("button", "Show pin", actions).onclick = () => focusPlace(place);
-    else link("Show in Google Maps", locationReviewUrl(reviewTarget), actions);
-    const add = node("button", routeIds.includes(place.id) ? "Remove from route" : "Add to route", actions);
-    add.className = "route-toggle";
-    add.onclick = () => toggleStop(place.id);
-  } else {
-    link("Find / navigate with Google Maps", navigationUrl(place), actions);
-  }
+  link("Navigate in Google Maps", navigationUrl(place), actions);
+  if (sidebar) node("button", "Show pin", actions).onclick = () => focusPlace(place);
+  else link("Show in Google Maps", locationReviewUrl(reviewTarget), actions);
+  const add = node("button", routeIds.includes(place.id) ? "Remove from route" : "Add to route", actions);
+  add.className = "route-toggle";
+  add.onclick = () => toggleStop(place.id);
   if (place.source_url) link("Original recommendation", place.source_url, actions);
   link("Save in Google Maps", locationReviewUrl(reviewTarget), actions);
   if (localMode) {
@@ -222,8 +219,8 @@ async function reviewPlace(place, change) {
   if (!response.ok) throw new Error(saved.error || "Location review could not be saved.");
   await loadLocal();
   mapStatus(saved.dropped ? "Recommendation dropped. Public updates follow the publishing cycle." :
-    saved.mapped ? "Location checked and saved." :
-    "Google Maps link checked and saved. Paste a place link with a precise location to add its missing pin.", true);
+    saved.mapped ? "Location approved and saved." :
+    "Approved. The recommendation remains in Without map pins until a precise pin is available.", true);
   return saved;
 }
 function placeIcon(place) {
@@ -272,10 +269,7 @@ function render(fitBounds = false) {
   const review = document.querySelector("#review-filter").value;
   const visible = places.filter(place => (!type || kindOf(place) === type) &&
     `${place.name} ${place.address || ""} ${place.description || ""} ${kinds[kindOf(place)].label}`.toLocaleLowerCase().includes(query));
-  const filtered = visible.filter(place =>
-    (review !== "unreviewed" || !place.google_maps_confirmed) &&
-    (review !== "confirmed" || place.google_maps_confirmed) &&
-    (review !== "unmapped" || (!coordinates(place) && !place.google_maps_confirmed)));
+  const filtered = visible.filter(place => review !== "unmapped" || !coordinates(place));
   const nearest = userPosition && document.querySelector("#sort").value === "nearest";
   if (nearest) {
     const distance = place => coordinates(place) ? map.distance(userPosition, [place.latitude, place.longitude]) : Infinity;
@@ -307,9 +301,8 @@ function render(fitBounds = false) {
   updateMarkers(visible);
   restoreReviewFocus(focused);
   const mapped = visible.filter(coordinates).length;
-  const checked = visible.filter(place => place.google_maps_confirmed).length;
   document.querySelector("#count").textContent =
-    `${filtered.length} in list / ${visible.length} saved / ${mapped} mapped / ${visible.length - mapped} unmapped / ${checked} checked by you`;
+    `${filtered.length} in list / ${visible.length} saved / ${mapped} mapped / ${visible.length - mapped} without pins`;
   for (const button of document.querySelectorAll("#legend button")) {
     button.setAttribute("aria-pressed", String(button.dataset.kind === type));
   }
@@ -799,11 +792,11 @@ async function show(payload, fitBounds = true) {
   document.querySelector("#toggle-day-plan").hidden = false;
   updateDayPlan(payload);
   document.querySelector("#review-note").textContent = localMode ?
-    "Checked places leave the review queue; saved pins stay on the map. Public updates follow publishing. Google saved lists are unchanged." :
-    "Read-only snapshot. Check or correct destinations in the local app; published updates include saved reviews.";
+    "Without map pins includes every unpinned recommendation. Approval never invents a pin. Google saved lists are unchanged." :
+    "Read-only snapshot. Approve or correct destinations in the local app.";
   updateMapActions(payload);
   if (!map) {
-    document.querySelector("#review-filter").value = localMode ? "unreviewed" : "";
+    document.querySelector("#review-filter").value = "";
     setSidebar(false);
     await startBasemap(payload.basemap);
     render(fitBounds);

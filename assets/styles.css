@@ -54,9 +54,6 @@ summary { cursor: pointer; } summary:focus-visible { outline: 2px solid #2563eb;
 .place-details h3 { display: inline; font-size: 1rem; }
 .place-details > summary .place-type { display: block; margin: 4px 0 0 16px; }
 .place-body { padding: 0 12px 12px; }
-.review-badge { display: inline-block; margin: 4px 0; padding: 3px 7px; border-radius: 12px;
-  background: #fff3d4; color: #805100; font-size: .75rem; }
-.review-badge.is-confirmed { background: #e2f5e8; color: #17643b; }
 .location-review { margin-top: 12px; font-size: .85rem; }
 .location-review > summary { padding: 8px 0; }
 .location-review-form { margin: 12px 0; }
