@@ -10,6 +10,12 @@ body.map-open { height: 100dvh; overflow: hidden; }
 h1 { font-size: 1.1rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #basemap-label { display: block; font-size: .75rem; color: #536078; } #basemap-label:empty { display: none; }
 #unlock { max-width: 440px; margin: 110px auto 24px; padding: 24px; background: white; border-radius: 14px; }
+body.map-open #unlock { position: fixed; z-index: 1050; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+  max-width: 340px; margin: 0; padding: 10px 12px; border-radius: 12px; background: #ffffffeb;
+  box-shadow: 0 2px 14px #17213726; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+body.map-open #unlock h2, body.map-open #unlock p, body.map-open #unlock label { display: none; }
+body.map-open #unlock input { flex: 1; min-width: 140px; margin: 0; padding: 8px; font-size: .85rem; }
+body.map-open #unlock button { min-height: 36px; padding: 8px 10px; font-size: .85rem; }
 input, button, select, textarea { font: inherit; padding: 10px; box-sizing: border-box; border-radius: 6px; border: 1px solid #9aa6b8; }
 input { width: 100%; margin: 8px 0; } button, a { cursor: pointer; } button { background: #fff; }
 #status { position: fixed; z-index: 1200; left: 12px; right: 12px; bottom: calc(32px + env(safe-area-inset-bottom));

@@ -179,6 +179,7 @@ function card(place, parent, sidebar = false) {
       const actions = node("div", "", content);
       actions.className = "place-actions";
       link("Google Maps", locationReviewUrl(reviewTarget), actions);
+      if (place.source_url) link("Original recommendation", place.source_url, actions);
     }
     return article;
   }

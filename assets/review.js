@@ -60,6 +60,12 @@ function locationReviewControls(place, submit, {compact = false} = {}) {
   destination.href = locationReviewUrl(place);
   destination.target = "_blank";
   destination.rel = "noopener noreferrer";
+  if (compact && place.source_url) {
+    const source = add("a", "Original recommendation", actions);
+    source.href = place.source_url;
+    source.target = "_blank";
+    source.rel = "noopener noreferrer";
+  }
   if (!compact) add("p", "Check the place and branch. If the search is ambiguous or wrong, paste the selected place's Google Maps share link below.", details);
   const confirm = add("button", compact ? "Approve" : "This is the right place", actions);
   confirm.type = "button";
