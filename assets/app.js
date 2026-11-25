@@ -18,11 +18,22 @@ let selectedPlaceId = null;
 const expandedPlaces = new Set();
 const collapsedSubjects = new Set();
 let publishedMapUrl = null;
+let editPassphrase = null;
+let editApiUrl = "http://127.0.0.1:8765";
+let readOnlyPayload = null;
+let unlocking = false;
 let dayPlan = null;
 let dayPlanView = false;
 let editingPlan = null;
 let editingDate = null;
 const dayPeriods = ["morning", "noon", "afternoon", "evening", "night"];
+const canEdit = () => localMode || Boolean(editPassphrase);
+const apiBase = () => localMode ? "" : editApiUrl;
+function authHeaders() {
+  return localMode ?
+    {"Content-Type": "application/json", "X-Inbox-Token": document.querySelector('meta[name="map-token"]').content} :
+    {"Content-Type": "application/json", "X-Collection-Key": editPassphrase || ""};
+}
 
 const subjects = {
   attractions: "Attractions", food: "Food & cafes", bars: "Bars", nature: "Parks & gardens",
@@ -179,7 +190,6 @@ function card(place, parent, sidebar = false) {
       const actions = node("div", "", content);
       actions.className = "place-actions";
       link("Google Maps", locationReviewUrl(reviewTarget), actions);
-      if (place.source_url) link("Original recommendation", place.source_url, actions);
     }
     return article;
   }
@@ -652,11 +662,11 @@ function setDayPlanView(open) {
   if (!open) map?.invalidateSize?.();
 }
 function renderPlanHeading(day, index, row) {
-  const cell = node("th", "", row);
+  const cell = node("th", "", row), editable = canEdit();
   cell.scope = "col";
   cell.dataset.date = day.date;
-  const heading = node(localMode ? "button" : "div", "", cell);
-  if (localMode) {
+  const heading = node(editable ? "button" : "div", "", cell);
+  if (editable) {
     heading.type = "button";
     heading.className = "plan-edit";
     heading.setAttribute("aria-label", `Edit ${planDate(day.date)}`);
@@ -701,10 +711,12 @@ function renderPlanCalendar(parent) {
   node("th", "Hotel for this night", hotels).scope = "row";
   for (const day of dayPlan.days) renderPlanHotel(day, hotels);
 }
-function updateDayPlan(payload) {
+function updateDayPlan(payload, force = false) {
   const next = payload.day_plan || {revision: 0, days: []};
-  if (dayPlan && next.revision < dayPlan.revision) return;
-  if (JSON.stringify(next) === JSON.stringify(dayPlan)) return;
+  if (!force && dayPlan && next.revision < dayPlan.revision) return;
+  const editable = canEdit();
+  const modeChanged = Boolean(document.querySelector("#day-plan-days .plan-edit")) !== (editable && next.days.length > 0);
+  if (!force && !modeChanged && JSON.stringify(next) === JSON.stringify(dayPlan)) return;
   dayPlan = next;
   const list = document.querySelector("#day-plan-days");
   const {scrollLeft, scrollTop} = list;
@@ -713,13 +725,13 @@ function updateDayPlan(payload) {
   list.scrollLeft = scrollLeft;
   list.scrollTop = scrollTop;
   document.querySelector("#day-plan-empty").hidden = dayPlan.days.length > 0;
-  document.querySelector("#add-plan-day").hidden = !localMode;
-  document.querySelector("#day-plan-status").textContent = localMode ?
+  document.querySelector("#add-plan-day").hidden = !editable;
+  document.querySelector("#day-plan-status").textContent = editable ?
     "Select a date heading to edit. Saved per trip; shared maps show a read-only copy after publishing." :
-    "Read-only trip plan. Changes are made in the local app and shared with the next update.";
+    "Read-only trip plan. Enter the passphrase or open the updateable link to edit.";
 }
 function openDayEditor(date = null) {
-  if (!localMode) return;
+  if (!canEdit()) return;
   editingPlan = structuredClone(dayPlan);
   editingDate = date;
   const day = editingPlan.days.find(day => day.date === date) || {};
@@ -744,6 +756,29 @@ function editedDay() {
   }
   return day;
 }
+function applyOfflineDayPlan(days, revision) {
+  const seen = new Set();
+  const normalized = days.map(day => {
+    const date = (day.date || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
+      throw new Error("Choose a valid calendar date.");
+    }
+    if (seen.has(date)) throw new Error("That date is already in this trip plan.");
+    seen.add(date);
+    return {
+      date,
+      title: (day.title || "").trim(),
+      morning: day.morning || [],
+      noon: day.noon || [],
+      afternoon: day.afternoon || [],
+      evening: day.evening || [],
+      night: day.night || [],
+      hotel: (day.hotel || "").trim(),
+      hotel_notes: (day.hotel_notes || "").trim(),
+    };
+  }).sort((a, b) => a.date.localeCompare(b.date));
+  return {revision: (revision || 0) + 1, days: normalized};
+}
 async function saveDayEditor(remove = false) {
   const button = document.querySelector("#save-plan-day");
   const removeButton = document.querySelector("#remove-plan-day");
@@ -752,13 +787,23 @@ async function saveDayEditor(remove = false) {
   try {
     const days = editingPlan.days.filter(day => day.date !== editingDate);
     if (!remove) days.push(editedDay());
-    const response = await fetch("/api/day-plan", {method: "POST",
-      headers: {"Content-Type": "application/json",
-        "X-Inbox-Token": document.querySelector('meta[name="map-token"]').content},
-      body: JSON.stringify({collection: collectionId, revision: editingPlan.revision, days})});
-    const saved = await response.json();
-    if (!response.ok) throw new Error(saved.error || "The daily plan could not be saved.");
-    updateDayPlan({day_plan: saved});
+    let saved;
+    try {
+      const response = await fetch(`${apiBase()}/api/day-plan`, {method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({collection: collectionId, revision: editingPlan.revision, days})});
+      const body = await response.json();
+      if (!response.ok) {
+        if (!localMode && (response.status === 403 || response.status === 404)) {
+          saved = applyOfflineDayPlan(days, editingPlan.revision);
+        } else throw new Error(body.error || "The daily plan could not be saved.");
+      } else saved = body;
+    } catch (error) {
+      if (localMode || !(error instanceof TypeError)) throw error;
+      saved = applyOfflineDayPlan(days, editingPlan.revision);
+    }
+    updateDayPlan({day_plan: saved}, true);
+    if (readOnlyPayload) readOnlyPayload = {...readOnlyPayload, day_plan: saved};
     document.querySelector("#day-editor").close();
   } catch (error) {
     document.querySelector("#plan-edit-status").textContent = error.message;
@@ -789,16 +834,16 @@ async function show(payload, fitBounds = true) {
   updateKinds();
   document.querySelector("#title").textContent = payload.name;
   document.title = payload.name;
-  document.querySelector("#unlock").hidden = true;
-  document.querySelector("#lock").hidden = localMode;
+  document.querySelector("#unlock").hidden = canEdit();
+  document.querySelector("#lock").hidden = localMode || !editPassphrase;
   document.querySelector("#content").hidden = false;
   document.body.classList.add("map-open");
   document.querySelector("#toggle-sidebar").hidden = dayPlanView;
   document.querySelector("#toggle-day-plan").hidden = false;
   updateDayPlan(payload);
-  document.querySelector("#review-note").textContent = localMode ?
+  document.querySelector("#review-note").textContent = canEdit() ?
     "Without map pins includes every unpinned recommendation. Approval never invents a pin. Google saved lists are unchanged." :
-    "Read-only snapshot. Approve or correct destinations in the local app.";
+    "Read-only snapshot. Enter the passphrase or open the updateable link to edit.";
   updateMapActions(payload);
   if (!map) {
     document.querySelector("#review-filter").value = "";
@@ -810,6 +855,7 @@ async function show(payload, fitBounds = true) {
   render(fitBounds);
 }
 function lock() {
+  editPassphrase = null;
   document.querySelector("#day-editor").close();
   document.querySelector("#day-plan-form").reset();
   document.querySelector("#day-plan-days").replaceChildren();
@@ -845,24 +891,27 @@ function lock() {
   document.querySelector("#search").value = "";
   document.querySelector("#review-filter").value = "";
   document.querySelector("#title").textContent = "Wanderlust";
-  document.title = "Wanderlust - Locked map";
+  document.title = "Wanderlust";
   document.querySelector("#content").hidden = true;
   document.querySelector("#lock").hidden = true;
   document.querySelector("#google-list-link").hidden = true;
   document.querySelector("#google-list-link").removeAttribute("href");
   document.querySelector("#share").hidden = true;
+  document.querySelector("#share-readonly").hidden = true;
   document.querySelector("#unlock").hidden = false;
   document.querySelector("#passphrase").value = "";
+  localStorage.clear();
+  sessionStorage.clear();
   if (!localMode && location.hash) history.replaceState(null, "", location.pathname + location.search);
   mapStatus("");
   document.querySelector("#provider-status").replaceChildren();
   publishedMapUrl = null;
 }
-document.querySelector("#unlock").onsubmit = async event => {
-  event.preventDefault();
-  const button = event.target.querySelector("button");
+async function unlockWithPassphrase(rawPassphrase) {
+  const button = document.querySelector("#unlock button");
   button.disabled = true;
-  mapStatus("Unlocking...");
+  unlocking = true;
+  mapStatus("Unlocking editing...");
   try {
     if (!crypto.subtle) throw new Error("Use HTTPS or localhost to unlock encrypted maps.");
     const response = await fetch("./data.enc.json", {cache: "no-store"});
@@ -871,7 +920,6 @@ document.querySelector("#unlock").onsubmit = async event => {
     if (envelope.version !== 1 || envelope.iterations !== 600000) throw new Error("Unsupported map format.");
     const salt = decode(envelope.salt), iv = decode(envelope.iv);
     if (salt.length !== 16 || iv.length !== 12) throw new Error("Invalid map encryption parameters.");
-    const rawPassphrase = document.querySelector("#passphrase").value;
     const password = encoder.encode(rawPassphrase);
     document.querySelector("#passphrase").value = "";
     const material = await crypto.subtle.importKey("raw", password, "PBKDF2", false, ["deriveKey"]);
@@ -880,20 +928,39 @@ document.querySelector("#unlock").onsubmit = async event => {
       iterations: envelope.iterations}, material, {name: "AES-GCM", length: 256}, false, ["decrypt"]);
     const plaintext = await crypto.subtle.decrypt({name: "AES-GCM", iv,
       additionalData: encoder.encode(`wanderlust-map:v1:${collectionId}`)}, key, decode(envelope.ciphertext));
-    const payload = JSON.parse(new TextDecoder().decode(plaintext));
-    if (!localMode && rawPassphrase) {
-      history.replaceState(null, "", `${location.pathname}${location.search}#key=${encodeURIComponent(rawPassphrase)}`);
+    let payload = JSON.parse(new TextDecoder().decode(plaintext));
+    editPassphrase = rawPassphrase;
+    if (payload.api_url) editApiUrl = payload.api_url;
+    if (!localMode && location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (!localMode && readOnlyPayload?.day_plan && (!payload.day_plan || readOnlyPayload.day_plan.revision > payload.day_plan.revision)) {
+      payload = {...payload, day_plan: readOnlyPayload.day_plan};
     }
-    await show(payload);
-    mapStatus(`Updated ${new Date(payload.updated_at).toLocaleString()}. Only this collection is loaded.`);
+    readOnlyPayload = payload;
+    await show(payload, !map);
+    mapStatus(`Editing unlocked. Updated ${new Date(payload.updated_at).toLocaleString()}.`, true);
   } catch (error) {
-    lock();
+    editPassphrase = null;
+    document.querySelector("#passphrase").value = "";
+    if (!localMode && location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (readOnlyPayload) {
+      await show(readOnlyPayload, false);
+    } else {
+      lock();
+    }
     mapStatus(error.name === "OperationError" ? "Wrong passphrase, damaged data, or a different collection." : error.message, true);
   } finally {
+    unlocking = false;
     button.disabled = false;
   }
+}
+document.querySelector("#unlock").onsubmit = async event => {
+  event.preventDefault();
+  await unlockWithPassphrase(document.querySelector("#passphrase").value);
 };
-document.querySelector("#lock").onclick = lock;
+document.querySelector("#lock").onclick = () => {
+  lock();
+  if (readOnlyPayload) show(readOnlyPayload);
+};
 document.querySelector("#search").oninput = () => render();
 document.querySelector("#kind").onchange = () => render();
 document.querySelector("#review-filter").onchange = () => render();
@@ -902,12 +969,30 @@ document.querySelector("#travel-mode").onchange = renderRoute;
 document.querySelector("#locate").onclick = locate;
 document.querySelector("#fit").onclick = fitPlaces;
 document.querySelector("#download").onclick = downloadMyMaps;
+document.querySelector("#share-readonly").onclick = async () => {
+  try {
+    if (!localMode) {
+      await navigator.clipboard.writeText(`${location.origin}${location.pathname}${location.search}`);
+      mapStatus("Read-only link copied. Anyone with this link can view the map and daily plan.", true);
+      return;
+    }
+    const token = document.querySelector('meta[name="map-token"]').content;
+    const response = await fetch("/api/maps/share", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-Inbox-Token": token},
+      body: JSON.stringify({collection: collectionId})});
+    const sharing = await response.json();
+    if (!response.ok) throw new Error(sharing.error || "Read-only link is unavailable.");
+    await navigator.clipboard.writeText(sharing.read_only_url || sharing.url);
+    mapStatus("Read-only link copied. Anyone with this link can view the map and daily plan.", true);
+  } catch (error) { mapStatus(error.message, true); }
+};
 document.querySelector("#share").onclick = async () => {
   try {
     if (!localMode) {
-      if (!location.hash.startsWith("#key=")) throw new Error("Share link is unavailable.");
-      await navigator.clipboard.writeText(location.href);
-      mapStatus("Private share link copied. Anyone with the full link can read this trip.", true);
+      if (!editPassphrase) throw new Error("Unlock editing first to copy the updateable link.");
+      const url = `${location.origin}${location.pathname}${location.search}#key=${encodeURIComponent(editPassphrase)}`;
+      await navigator.clipboard.writeText(url);
+      mapStatus("Updateable link copied. It unlocks editing with the passphrase and strips #key= from the address bar.", true);
       return;
     }
     const token = document.querySelector('meta[name="map-token"]').content;
@@ -917,7 +1002,7 @@ document.querySelector("#share").onclick = async () => {
     const sharing = await response.json();
     if (!response.ok) throw new Error(sharing.error || "Share link is unavailable.");
     await navigator.clipboard.writeText(sharing.share_url);
-    mapStatus("Private share link copied. Anyone with the full link can read this trip.", true);
+    mapStatus("Updateable link copied. Anyone with the passphrase or updateable link can edit this trip.", true);
   } catch (error) { mapStatus(error.message, true); }
 };
 document.querySelector("#businesses").onclick = () => setGoogleBusinesses(!googleBusinessesVisible);
@@ -980,7 +1065,8 @@ function backgroundTaps(view) {
 }
 function updateMapActions(payload) {
   publishedMapUrl = payload.sharing?.url || null;
-  document.querySelector("#share").hidden = localMode ? !payload.sharing?.url : !location.hash.startsWith("#key=");
+  document.querySelector("#share-readonly").hidden = localMode ? !payload.sharing?.url : false;
+  document.querySelector("#share").hidden = localMode ? !payload.sharing?.url : !editPassphrase;
   const list = document.querySelector("#google-list-link");
   list.hidden = !payload.google_list_url;
   if (payload.google_list_url) list.href = payload.google_list_url;
@@ -989,7 +1075,9 @@ async function loadLocal() {
   if (loadingLocal) return;
   loadingLocal = true;
   try {
-    const response = await fetch("/api/map?collection=" + encodeURIComponent(collectionId), {cache: "no-store"});
+    const response = await fetch(`${apiBase()}/api/map?collection=` + encodeURIComponent(collectionId), {
+      cache: "no-store", headers: localMode ? {} : {"X-Collection-Key": editPassphrase || ""},
+    });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Local map could not be loaded.");
     if (!map || payload.name !== document.title || JSON.stringify(payload.places) !== JSON.stringify(places)) {
@@ -1009,26 +1097,41 @@ async function loadLocal() {
     loadingLocal = false;
   }
 }
-function unlockFragment() {
-  if (!location.hash) return;
+async function loadReadOnly() {
+  try {
+    const response = await fetch("./data.json", {cache: "no-store"});
+    if (!response.ok) return;
+    const payload = await response.json();
+    readOnlyPayload = payload;
+    if (unlocking || editPassphrase) return;
+    await show(payload);
+    mapStatus(`Read-only view · Updated ${new Date(payload.updated_at).toLocaleString()}. Enter passphrase to edit.`);
+  } catch (error) {
+    if (!unlocking && !editPassphrase) mapStatus(error.message, true);
+  }
+}
+function readHashKey() {
+  if (!location.hash) return null;
   const fragment = new URLSearchParams(location.hash.slice(1));
   const key = fragment.get("key");
-  if (!key) {
-    history.replaceState(null, "", location.pathname + location.search);
-    return;
-  }
-  lock();
-  document.querySelector("#passphrase").value = key;
-  document.querySelector("#unlock").requestSubmit();
+  history.replaceState(null, "", location.pathname + location.search);
+  return key || null;
 }
 document.querySelector("#unlock button").disabled = false;
-document.querySelector("#unlock button").textContent = "Unlock map";
+document.querySelector("#unlock button").textContent = "Unlock editing";
 if (localMode) {
   document.querySelector("#unlock").hidden = true;
   document.title = "Wanderlust - Local map";
   loadLocal();
   setInterval(() => { if (!document.hidden) loadLocal(); }, 5000);
 } else {
-  window.addEventListener("hashchange", unlockFragment);
-  unlockFragment();
+  (async () => {
+    const initialKey = readHashKey();
+    await loadReadOnly();
+    if (initialKey) await unlockWithPassphrase(initialKey);
+    window.addEventListener("hashchange", () => {
+      const key = readHashKey();
+      if (key) unlockWithPassphrase(key);
+    });
+  })();
 }
