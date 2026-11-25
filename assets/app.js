@@ -478,7 +478,7 @@ function kmlElement(parent, name, value) {
   return child;
 }
 function myMapsIconRoot() {
-  const base = localMode ? publishedMapUrl : location.protocol === "https:" ? location.href : null;
+  const base = localMode ? publishedMapUrl : location.protocol === "https:" ? location.origin + location.pathname : null;
   return base ? new URL("../assets/kml-icons/", base).href : null;
 }
 function kmlColor(kind) {
@@ -852,6 +852,7 @@ function lock() {
   document.querySelector("#share").hidden = true;
   document.querySelector("#unlock").hidden = false;
   document.querySelector("#passphrase").value = "";
+  if (!localMode && location.hash) history.replaceState(null, "", location.pathname + location.search);
   mapStatus("");
   document.querySelector("#provider-status").replaceChildren();
   publishedMapUrl = null;
@@ -869,7 +870,8 @@ document.querySelector("#unlock").onsubmit = async event => {
     if (envelope.version !== 1 || envelope.iterations !== 600000) throw new Error("Unsupported map format.");
     const salt = decode(envelope.salt), iv = decode(envelope.iv);
     if (salt.length !== 16 || iv.length !== 12) throw new Error("Invalid map encryption parameters.");
-    const password = encoder.encode(document.querySelector("#passphrase").value);
+    const rawPassphrase = document.querySelector("#passphrase").value;
+    const password = encoder.encode(rawPassphrase);
     document.querySelector("#passphrase").value = "";
     const material = await crypto.subtle.importKey("raw", password, "PBKDF2", false, ["deriveKey"]);
     password.fill(0);
@@ -878,6 +880,9 @@ document.querySelector("#unlock").onsubmit = async event => {
     const plaintext = await crypto.subtle.decrypt({name: "AES-GCM", iv,
       additionalData: encoder.encode(`wanderlust-map:v1:${collectionId}`)}, key, decode(envelope.ciphertext));
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
+    if (!localMode && rawPassphrase) {
+      history.replaceState(null, "", `${location.pathname}${location.search}#key=${encodeURIComponent(rawPassphrase)}`);
+    }
     await show(payload);
     mapStatus(`Updated ${new Date(payload.updated_at).toLocaleString()}. Only this collection is loaded.`);
   } catch (error) {
@@ -898,6 +903,12 @@ document.querySelector("#fit").onclick = fitPlaces;
 document.querySelector("#download").onclick = downloadMyMaps;
 document.querySelector("#share").onclick = async () => {
   try {
+    if (!localMode) {
+      if (!location.hash.startsWith("#key=")) throw new Error("Share link is unavailable.");
+      await navigator.clipboard.writeText(location.href);
+      mapStatus("Private share link copied. Anyone with the full link can read this trip.", true);
+      return;
+    }
     const token = document.querySelector('meta[name="map-token"]').content;
     const response = await fetch("/api/maps/share", {method: "POST",
       headers: {"Content-Type": "application/json", "X-Inbox-Token": token},
@@ -968,7 +979,7 @@ function backgroundTaps(view) {
 }
 function updateMapActions(payload) {
   publishedMapUrl = payload.sharing?.url || null;
-  document.querySelector("#share").hidden = !localMode || !payload.sharing?.url;
+  document.querySelector("#share").hidden = localMode ? !payload.sharing?.url : !location.hash.startsWith("#key=");
   const list = document.querySelector("#google-list-link");
   list.hidden = !payload.google_list_url;
   if (payload.google_list_url) list.href = payload.google_list_url;
@@ -1001,12 +1012,13 @@ function unlockFragment() {
   if (!location.hash) return;
   const fragment = new URLSearchParams(location.hash.slice(1));
   const key = fragment.get("key");
-  history.replaceState(null, "", location.pathname + location.search);
-  if (key) {
-    lock();
-    document.querySelector("#passphrase").value = key;
-    document.querySelector("#unlock").requestSubmit();
+  if (!key) {
+    history.replaceState(null, "", location.pathname + location.search);
+    return;
   }
+  lock();
+  document.querySelector("#passphrase").value = key;
+  document.querySelector("#unlock").requestSubmit();
 }
 document.querySelector("#unlock button").disabled = false;
 document.querySelector("#unlock button").textContent = "Unlock map";
